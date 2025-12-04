@@ -10,9 +10,15 @@ interface UseLiveVehicleUpdatesArgs {
   vehicleIds: string[]
   queryKey: QueryKey
   enabled?: boolean
+  onPositionUpdate?: (payload: VehiclePositionUpdate) => void
 }
 
-export function useLiveVehicleUpdates({ vehicleIds, queryKey, enabled = true }: UseLiveVehicleUpdatesArgs) {
+export function useLiveVehicleUpdates({
+  vehicleIds,
+  queryKey,
+  enabled = true,
+  onPositionUpdate,
+}: UseLiveVehicleUpdatesArgs) {
   const queryClient = useQueryClient()
   const token = useAuthStore((state) => state.token)
 
@@ -82,6 +88,15 @@ export function useLiveVehicleUpdates({ vehicleIds, queryKey, enabled = true }: 
             return { ...current, vehicles }
           },
         )
+
+        onPositionUpdate?.({
+          vehicle_id: payload.vehicle_id,
+          lat: payload.lat,
+          lng: payload.lng,
+          speed: payload.speed,
+          heading: payload.heading,
+          timestamp: payload.timestamp,
+        })
       } catch (error) {
         console.error('[ws] Failed to process payload', error)
       }
@@ -106,7 +121,7 @@ export function useLiveVehicleUpdates({ vehicleIds, queryKey, enabled = true }: 
 
       socketRef.current = null
     }
-  }, [enabled, token, queryClient])
+  }, [enabled, token, queryClient, onPositionUpdate])
 
   useEffect(() => {
     if (!enabled || !sortedVehicleIds.length) {

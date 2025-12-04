@@ -15,7 +15,7 @@ export function AppShell({ children, userEmail, onSignOut }: AppShellProps) {
   return (
     <div className="flex min-h-screen flex-col bg-muted/30">
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="container flex h-16 items-center justify-between gap-4">
+        <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/60 bg-card text-primary">
               <MapPinned className="h-5 w-5" />
@@ -24,7 +24,7 @@ export function AppShell({ children, userEmail, onSignOut }: AppShellProps) {
               <p className="text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-muted-foreground">
                 Carbn Fleet
               </p>
-              <h1 className="text-lg font-semibold text-foreground">Vehicle Insights Playground</h1>
+              <h1 className="text-lg font-semibold text-foreground">Book Your Vehicle</h1>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -33,7 +33,9 @@ export function AppShell({ children, userEmail, onSignOut }: AppShellProps) {
           </div>
         </div>
       </header>
-      <main className="container flex-1 pb-10 pt-6">{children}</main>
+      <main className="flex-1 pb-10 pt-6">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">{children}</div>
+      </main>
     </div>
   )
 }

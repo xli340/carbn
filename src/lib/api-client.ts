@@ -34,6 +34,10 @@ export async function apiRequest<TResponse, TBody = unknown>(
   })
 
   if (!response.ok) {
+    if (response.status === 401) {
+      useAuthStore.getState().signOut()
+      throw new Error('Session expired. Please sign in again.')
+    }
     const message = await safeReadText(response)
     throw new Error(message || `API request failed with status ${response.status}`)
   }

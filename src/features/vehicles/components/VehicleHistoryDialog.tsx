@@ -42,8 +42,8 @@ export function VehicleHistoryDialog({
   const [activePresetHours, setActivePresetHours] = useState<number | null>(1)
 
   const rangeSummary = useMemo(() => {
-    if (!vehicle) return 'Select a vehicle to request its history.'
-    return `Choose a window to plot ${vehicle.registration} on the map.`
+    if (!vehicle) return 'Select a historical trip to view its path.'
+    return `Pick a window to replay ${vehicle.registration} on the map.`
   }, [vehicle])
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -99,8 +99,8 @@ export function VehicleHistoryDialog({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
-      <div className="relative w-full max-w-3xl rounded-2xl border border-border/70 bg-background/95 p-6 shadow-2xl shadow-black/30">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm px-3 py-6 sm:items-center sm:px-4">
+      <div className="relative w-full max-w-[420px] min-w-0 max-h-[90vh] overflow-y-auto rounded-2xl border border-border/70 bg-background/95 p-4 shadow-2xl shadow-black/30 sm:max-w-3xl sm:p-6">
         <button
           type="button"
           aria-label="Close"
@@ -109,11 +109,11 @@ export function VehicleHistoryDialog({
         >
           <X className="h-5 w-5" />
         </button>
-        <div className="flex flex-col gap-1 pr-8">
+        <div className="flex flex-col gap-1 pr-12">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <History className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-semibold">Vehicle history</h3>
+              <h3 className="text-lg font-semibold">Track history</h3>
             </div>
             {vehicle && (
               <Badge variant="outline" className="text-xs uppercase">
@@ -145,26 +145,30 @@ export function VehicleHistoryDialog({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <Label htmlFor="history-from">Start</Label>
               <Input
                 id="history-from"
                 type="datetime-local"
                 value={fromValue}
                 max={toValue}
+                className="w-full"
+                step={3600}
                 onChange={(event) => {
                   setFromValue(event.target.value)
                   setActivePresetHours(null)
                 }}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <Label htmlFor="history-to">End</Label>
               <Input
                 id="history-to"
                 type="datetime-local"
                 value={toValue}
                 min={fromValue}
+                className="w-full"
+                step={3600}
                 onChange={(event) => {
                   setToValue(event.target.value)
                   setActivePresetHours(null)
@@ -189,7 +193,7 @@ export function VehicleHistoryDialog({
                   onClick={handleResetTrack}
                 >
                   <X className="mr-1 h-3.5 w-3.5" />
-                  Reset track
+                  Clear track
                 </Button>
               )}
             </div>
@@ -202,7 +206,7 @@ export function VehicleHistoryDialog({
                 disabled={!vehicle || isSubmitting}
                 className="bg-black text-white hover:bg-black/90"
               >
-                {isSubmitting ? 'Loading…' : 'Fetch history'}
+                {isSubmitting ? 'Loading…' : 'View'}
               </Button>
             </div>
           </div>
@@ -214,11 +218,12 @@ export function VehicleHistoryDialog({
 }
 
 function buildRangeHours(hours: number) {
-  const now = Date.now()
-  const from = new Date(now - hours * 60 * 60 * 1000)
+  const now = new Date()
+  now.setMinutes(0, 0, 0)
+  const from = new Date(now.getTime() - hours * 60 * 60 * 1000)
   return {
     from: formatDateTimeLocal(from),
-    to: formatDateTimeLocal(new Date(now)),
+    to: formatDateTimeLocal(now),
   }
 }
 

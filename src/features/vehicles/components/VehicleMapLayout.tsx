@@ -13,8 +13,13 @@ interface VehicleMapLayoutProps {
   mapId?: string
   showInfoWindow?: boolean
   isTrackActive?: boolean
+  activeTripVehicleId?: string
+  hideVehicles?: boolean
+  showTrackEndpoints?: boolean
   onSelectVehicle: (vehicleId?: string) => void
+  onBookVehicle: (vehicle: Vehicle) => void
   onOpenHistory: (vehicle: Vehicle) => void
+  onEndTrip?: () => void
   onResetTrack: () => void
   onDismissInfoWindow: () => void
   onBoundsChange: (bounds: MapBounds) => void
@@ -28,7 +33,12 @@ export function VehicleMapLayout({
   selectedVehicleId,
   mapId,
   onSelectVehicle,
+  onBookVehicle,
   onOpenHistory,
+  onEndTrip,
+  activeTripVehicleId,
+  hideVehicles,
+  showTrackEndpoints,
   showInfoWindow,
   isTrackActive,
   onResetTrack,
@@ -36,9 +46,9 @@ export function VehicleMapLayout({
   onBoundsChange,
 }: VehicleMapLayoutProps) {
   return (
-    <div className="space-y-6">
-      <div className="grid min-h-[600px] items-stretch gap-6 xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,1fr)]">
-        <Card className="flex h-full min-h-[560px] flex-col overflow-hidden border border-border/60 shadow-lg shadow-primary/5">
+    <div className="space-y-6 w-full">
+      <div className="grid min-h-[600px] w-full min-w-0 items-stretch gap-6 xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,1fr)]">
+        <Card className="flex h-full min-h-[560px] min-w-0 flex-col overflow-hidden border border-border/60 shadow-lg shadow-primary/5">
           <CardContent className="h-full p-0">
             <VehicleMap
               vehicles={vehicles}
@@ -47,11 +57,15 @@ export function VehicleMapLayout({
               trackPoints={trackPoints}
               isLoading={isLoadingVehicles}
               mapId={mapId}
-              onOpenHistory={onOpenHistory}
+              onBookVehicle={onBookVehicle}
               onDismissInfoWindow={onDismissInfoWindow}
+              activeTripVehicleId={activeTripVehicleId}
+              hideVehicles={hideVehicles}
+              showTrackEndpoints={showTrackEndpoints}
               showInfoWindow={showInfoWindow}
               isTrackActive={isTrackActive}
               onResetTrack={onResetTrack}
+              onEndTrip={onEndTrip}
               onBoundsChange={onBoundsChange}
               onSelectVehicle={onSelectVehicle}
             />
@@ -64,6 +78,8 @@ export function VehicleMapLayout({
           selectedVehicleId={selectedVehicleId}
           onOpenHistory={onOpenHistory}
           onSelectVehicle={onSelectVehicle}
+          tripActive={Boolean(activeTripVehicleId)}
+          onEndTrip={onEndTrip}
         />
       </div>
     </div>

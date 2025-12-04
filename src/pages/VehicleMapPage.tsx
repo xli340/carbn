@@ -7,10 +7,11 @@ import { DEFAULT_MAP_ID } from '@/config/map'
 import { useAuthStore } from '@/features/auth/store/auth-store'
 import { useVehicleSelectionStore } from '@/features/vehicles/stores/vehicle-selection'
 import { VehicleMapLayout } from '@/features/vehicles/components/VehicleMapLayout'
+import { VehicleBookingDialog } from '@/features/vehicles/components/VehicleBookingDialog'
 import { useVehiclesLiveQuery, useVehicleTrackQuery, vehiclesKeys } from '@/features/vehicles/hooks/useVehicleQueries'
 import { useLiveVehicleUpdates } from '@/features/vehicles/hooks/useLiveVehicleUpdates'
 import { VehicleHistoryDialog } from '@/features/vehicles/components/VehicleHistoryDialog'
-import type { Vehicle, VehicleTrackSearchParams } from '@/features/vehicles/types'
+import type { Vehicle, VehicleTrackPoint, VehicleTrackSearchParams } from '@/features/vehicles/types'
 
 export function VehicleMapPage() {
   const bounds = useVehicleSelectionStore((state) => state.bounds)
@@ -25,16 +26,42 @@ export function VehicleMapPage() {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [historyDialogVehicle, setHistoryDialogVehicle] = useState<Vehicle | undefined>(undefined)
   const [showInfoWindow, setShowInfoWindow] = useState(true)
+  const [bookingDialogOpen, setBookingDialogOpen] = useState(false)
+  const [bookingVehicle, setBookingVehicle] = useState<Vehicle | undefined>(undefined)
+  const [activeTripVehicleId, setActiveTripVehicleId] = useState<string | null>(null)
+  const [liveTripTrackPoints, setLiveTripTrackPoints] = useState<VehicleTrackPoint[]>([])
 
   const vehicles = vehiclesQuery.data?.vehicles ?? []
   const trackPoints = trackVehicleId && trackParams ? vehicleTrackQuery.data?.points ?? [] : []
-  const isTrackActive = trackPoints.length > 0
+  const isLiveTripActive = Boolean(activeTripVehicleId)
+  const displayedTrackPoints = isLiveTripActive ? liveTripTrackPoints : trackPoints
+  const isTrackActive = displayedTrackPoints.length > 0
+  const isHistoryTrackActive = !isLiveTripActive && Boolean(trackVehicleId && trackParams && trackPoints.length)
   const token = useAuthStore((state) => state.token)
 
+  const handleLivePosition = useCallback(
+    (payload: VehicleTrackPoint & { vehicle_id: string }) => {
+      if (activeTripVehicleId && payload.vehicle_id === activeTripVehicleId) {
+        setLiveTripTrackPoints((current) => [
+          ...current,
+          {
+            lat: payload.lat,
+            lng: payload.lng,
+            speed: payload.speed,
+            heading: payload.heading,
+            timestamp: payload.timestamp,
+          },
+        ])
+      }
+    },
+    [activeTripVehicleId],
+  )
+
   useLiveVehicleUpdates({
-    vehicleIds: vehicles.map((vehicle) => vehicle.vehicle_id),
+    vehicleIds: isLiveTripActive && activeTripVehicleId ? [activeTripVehicleId] : vehicles.map((vehicle) => vehicle.vehicle_id),
     queryKey: vehiclesKeys.live(bounds),
     enabled: Boolean(token),
+    onPositionUpdate: handleLivePosition,
   })
 
   const handleSelectVehicle = useCallback(
@@ -65,10 +92,49 @@ export function VehicleMapPage() {
     setTrackParams(null)
     setSelectedVehicleId(undefined)
     setShowInfoWindow(false)
+    setLiveTripTrackPoints([])
   }, [setSelectedVehicleId])
 
   const handleDismissInfoWindow = useCallback(() => {
     setShowInfoWindow(false)
+  }, [])
+
+  const handleBookVehicle = useCallback(
+    (vehicle: Vehicle) => {
+      setBookingVehicle(vehicle)
+      setBookingDialogOpen(true)
+      setSelectedVehicleId(vehicle.vehicle_id)
+      setShowInfoWindow(true)
+    },
+    [setSelectedVehicleId],
+  )
+
+  const handleTripStart = useCallback(
+    (vehicle: Vehicle) => {
+      setActiveTripVehicleId(vehicle.vehicle_id)
+      setLiveTripTrackPoints([])
+      setTrackVehicleId(null)
+      setTrackParams(null)
+      setHistoryDialogOpen(false)
+      setShowInfoWindow(true)
+    },
+    [],
+  )
+
+  const handleEndTrip = useCallback(() => {
+    setActiveTripVehicleId(null)
+    setLiveTripTrackPoints([])
+    setShowInfoWindow(false)
+    setSelectedVehicleId(undefined)
+    vehiclesQuery.refetch()
+  }, [vehiclesQuery])
+
+  const handleBookingOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setBookingVehicle(undefined)
+      setShowInfoWindow(false)
+    }
+    setBookingDialogOpen(open)
   }, [])
 
   if (!env.googleMapsApiKey) {
@@ -78,16 +144,29 @@ export function VehicleMapPage() {
   return (
     <APIProvider apiKey={env.googleMapsApiKey} solutionChannel="GMP_carbn_fleet_scaffold">
       <VehicleMapLayout
-        vehicles={vehicles}
+        vehicles={
+          isLiveTripActive && activeTripVehicleId
+            ? (() => {
+                const filtered = vehicles.filter((v) => v.vehicle_id === activeTripVehicleId)
+                if (filtered.length) return filtered
+                return bookingVehicle && bookingVehicle.vehicle_id === activeTripVehicleId ? [bookingVehicle] : []
+              })()
+            : vehicles
+        }
         bounds={bounds}
-        trackPoints={trackPoints}
+        trackPoints={displayedTrackPoints}
         selectedVehicleId={selectedVehicleId}
         isLoadingVehicles={vehiclesQuery.isLoading}
         mapId={DEFAULT_MAP_ID}
         isTrackActive={isTrackActive}
+        hideVehicles={isHistoryTrackActive}
+        showTrackEndpoints={isHistoryTrackActive}
         showInfoWindow={showInfoWindow}
+        onBookVehicle={handleBookVehicle}
         onOpenHistory={handleOpenHistory}
         onResetTrack={handleResetTrack}
+        activeTripVehicleId={activeTripVehicleId || undefined}
+        onEndTrip={handleEndTrip}
         onDismissInfoWindow={handleDismissInfoWindow}
         onBoundsChange={setBounds}
         onSelectVehicle={handleSelectVehicle}
@@ -100,6 +179,12 @@ export function VehicleMapPage() {
         onOpenChange={setHistoryDialogOpen}
         onSubmit={handleSubmitHistory}
         onResetTrack={handleResetTrack}
+      />
+      <VehicleBookingDialog
+        open={bookingDialogOpen}
+        vehicle={bookingVehicle}
+        onOpenChange={handleBookingOpenChange}
+        onTripStart={handleTripStart}
       />
     </APIProvider>
   )
