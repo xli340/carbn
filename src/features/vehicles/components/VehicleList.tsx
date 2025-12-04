@@ -52,7 +52,7 @@ export function VehicleList({
     <Card className={cn('flex h-full min-w-0 flex-col border-primary/20 shadow-lg shadow-primary/5', className)}>
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div>
-          <CardTitle className="text-xl font-semibold">Historical Trips</CardTitle>
+          <CardTitle className="text-xl font-semibold">Historical Tracks</CardTitle>
           <CardDescription>
             {isLoading
               ? 'Loading historical trips…'

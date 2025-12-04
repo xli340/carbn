@@ -98,14 +98,18 @@ export function VehicleMapPage() {
     [historyDialogVehicle, vehicles],
   )
 
-  const handleResetTrack = useCallback(() => {
+  const clearHistoryTrackState = useCallback(() => {
     setTrackVehicleId(null)
     setTrackParams(null)
     setTrackedVehicleInfo(undefined)
+  }, [])
+
+  const handleResetTrack = useCallback(() => {
+    clearHistoryTrackState()
     setSelectedVehicleId(undefined)
     setShowInfoWindow(false)
     setLiveTripTrackPoints([])
-  }, [setSelectedVehicleId])
+  }, [clearHistoryTrackState, setSelectedVehicleId])
 
   const handleDismissInfoWindow = useCallback(() => {
     setShowInfoWindow(false)
@@ -113,34 +117,34 @@ export function VehicleMapPage() {
 
   const handleBookVehicle = useCallback(
     (vehicle: Vehicle) => {
+      clearHistoryTrackState()
       setBookingVehicle(vehicle)
       setBookingDialogOpen(true)
       setSelectedVehicleId(vehicle.vehicle_id)
       setShowInfoWindow(true)
     },
-    [setSelectedVehicleId],
+    [clearHistoryTrackState, setSelectedVehicleId],
   )
 
   const handleTripStart = useCallback(
     (vehicle: Vehicle) => {
       setActiveTripVehicleId(vehicle.vehicle_id)
       setLiveTripTrackPoints([])
-      setTrackVehicleId(null)
-      setTrackParams(null)
-      setTrackedVehicleInfo(undefined)
+      clearHistoryTrackState()
       setHistoryDialogOpen(false)
       setShowInfoWindow(true)
     },
-    [],
+    [clearHistoryTrackState],
   )
 
   const handleEndTrip = useCallback(() => {
     setActiveTripVehicleId(null)
     setLiveTripTrackPoints([])
+    clearHistoryTrackState()
     setShowInfoWindow(false)
     setSelectedVehicleId(undefined)
     vehiclesQuery.refetch()
-  }, [vehiclesQuery])
+  }, [clearHistoryTrackState, vehiclesQuery])
 
   const handleBookingOpenChange = useCallback((open: boolean) => {
     if (!open) {

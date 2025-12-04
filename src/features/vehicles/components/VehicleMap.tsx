@@ -8,7 +8,7 @@ import {
   useMapsLibrary,
 } from '@vis.gl/react-google-maps'
 import { LoaderCircle } from 'lucide-react'
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -44,6 +44,28 @@ type VehicleClusterGroup = {
 }
 
 type AnimationState = 'idle' | 'running' | 'paused' | 'completed'
+
+const MIN_SEGMENT_DURATION_MS = 180
+const MAX_SEGMENT_DURATION_MS = 3200
+const FALLBACK_SEGMENT_DURATION_MS = 800
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function normalizeHeadingDegrees(heading: number) {
+  return (heading % 360 + 360) % 360
+}
+
+function shortestHeadingDelta(from: number, to: number) {
+  const delta = normalizeHeadingDegrees(to) - normalizeHeadingDegrees(from)
+  return (((delta + 540) % 360) - 180)
+}
+
+function headingFromPoints(a: VehicleTrackPoint, b: VehicleTrackPoint) {
+  const rad = Math.atan2(b.lng - a.lng, b.lat - a.lat)
+  return normalizeHeadingDegrees((rad * 180) / Math.PI)
+}
 
 function clusterRadiusForZoom(zoom: number) {
   if (zoom <= 5) return 1.2
@@ -81,12 +103,22 @@ export const VehicleMap = memo(function VehicleMap({
   const [animationState, setAnimationState] = useState<AnimationState>('idle')
   const [playbackIndex, setPlaybackIndex] = useState(0)
   const [playbackSpeed, setPlaybackSpeed] = useState(1)
+  const [interpolatedPoint, setInterpolatedPoint] = useState<VehicleTrackPoint | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
+  const segmentIndexRef = useRef(0)
+  const segmentStartTimeRef = useRef(0)
+  const pausedProgressRef = useRef(0)
+  const speedRef = useRef(playbackSpeed)
   const coreLibrary = useMapsLibrary('core')
 
   const selectedVehicle = useMemo(
     () => vehicles.find((vehicle) => vehicle.vehicle_id === selectedVehicleId),
     [selectedVehicleId, vehicles],
   )
+
+  useEffect(() => {
+    speedRef.current = playbackSpeed
+  }, [playbackSpeed])
 
   const defaultBoundsLiteral = useMemo(
     () => ({
@@ -119,17 +151,44 @@ export const VehicleMap = memo(function VehicleMap({
 
   const animationEnabled = isAnimationMode && trackPoints.length > 0
 
+  const trackSegments = useMemo(() => {
+    if (trackPoints.length < 2) {
+      return []
+    }
+
+    return trackPoints.slice(0, -1).map((point, index) => {
+      const next = trackPoints[index + 1]
+      const startTs = new Date(point.timestamp).getTime()
+      const endTs = new Date(next.timestamp).getTime()
+      const rawDuration = endTs - startTs
+      const durationMs =
+        Number.isFinite(rawDuration) && rawDuration > 0
+          ? clamp(rawDuration, MIN_SEGMENT_DURATION_MS, MAX_SEGMENT_DURATION_MS)
+          : FALLBACK_SEGMENT_DURATION_MS
+
+      return { from: point, to: next, durationMs }
+    })
+  }, [trackPoints])
+
   const currentAnimatedPoint = useMemo(() => {
     if (!animationEnabled) return null
+    if (interpolatedPoint) return interpolatedPoint
     const clampedIndex = Math.min(playbackIndex, trackPoints.length - 1)
     return trackPoints[clampedIndex]
-  }, [animationEnabled, playbackIndex, trackPoints])
+  }, [animationEnabled, interpolatedPoint, playbackIndex, trackPoints])
 
   const animatedTrail = useMemo(() => {
     if (!animationEnabled) return []
-    const endIndex = Math.min(playbackIndex, trackPoints.length - 1)
-    return trackPoints.slice(0, endIndex + 1)
-  }, [animationEnabled, playbackIndex, trackPoints])
+    const endIndex = Math.min(playbackIndex + 1, trackPoints.length)
+    const trail = trackPoints.slice(0, endIndex)
+    if (interpolatedPoint) {
+      const lastPoint = trail[trail.length - 1]
+      if (!lastPoint || lastPoint.lat !== interpolatedPoint.lat || lastPoint.lng !== interpolatedPoint.lng) {
+        trail.push(interpolatedPoint)
+      }
+    }
+    return trail
+  }, [animationEnabled, interpolatedPoint, playbackIndex, trackPoints])
 
   const clusterRadius = useMemo(() => clusterRadiusForZoom(mapZoom), [mapZoom])
 
@@ -187,25 +246,81 @@ export const VehicleMap = memo(function VehicleMap({
   }, [animationEnabled, mapInstance, trackPoints])
 
   useEffect(() => {
-    if (!animationEnabled || animationState !== 'running') {
+    if (!animationEnabled || animationState !== 'running' || !trackSegments.length) {
       return
     }
 
-    const stepMs = Math.max(120, 700 / playbackSpeed)
-    const timer = window.setInterval(() => {
-      setPlaybackIndex((current) => {
-        const nextIndex = current + 1
-        if (nextIndex >= trackPoints.length) {
-          window.clearInterval(timer)
-          setAnimationState('completed')
-          return trackPoints.length - 1
-        }
-        return nextIndex
-      })
-    }, stepMs)
+    segmentIndexRef.current = clamp(segmentIndexRef.current, 0, trackSegments.length - 1)
 
-    return () => window.clearInterval(timer)
-  }, [animationEnabled, animationState, playbackSpeed, trackPoints])
+    // Drive playback with requestAnimationFrame so position/heading tween smoothly using segment durations.
+    const step = (now: number) => {
+      const currentSegment = trackSegments[segmentIndexRef.current]
+      if (!currentSegment) {
+        setInterpolatedPoint(trackPoints[trackPoints.length - 1] ?? null)
+        setPlaybackIndex(trackPoints.length - 1)
+        setAnimationState('completed')
+        return
+      }
+
+      const effectiveDuration = Math.max(
+        80,
+        currentSegment.durationMs / Math.max(speedRef.current, 0.1),
+      )
+      const elapsed = now - segmentStartTimeRef.current
+      const t = Math.min(elapsed / effectiveDuration, 1)
+
+      const headingStart = Number.isFinite(currentSegment.from.heading)
+        ? currentSegment.from.heading
+        : headingFromPoints(currentSegment.from, currentSegment.to)
+      const headingEnd = Number.isFinite(currentSegment.to.heading)
+        ? currentSegment.to.heading
+        : headingFromPoints(currentSegment.from, currentSegment.to)
+      const interpolatedHeading = normalizeHeadingDegrees(
+        headingStart + shortestHeadingDelta(headingStart, headingEnd) * t,
+      )
+
+      const interpolatedSpeed =
+        currentSegment.from.speed + (currentSegment.to.speed - currentSegment.from.speed) * t
+
+      const nextPoint: VehicleTrackPoint = {
+        lat: currentSegment.from.lat + (currentSegment.to.lat - currentSegment.from.lat) * t,
+        lng: currentSegment.from.lng + (currentSegment.to.lng - currentSegment.from.lng) * t,
+        heading: interpolatedHeading,
+        speed: interpolatedSpeed,
+        timestamp: currentSegment.from.timestamp,
+      }
+
+      setInterpolatedPoint(nextPoint)
+      pausedProgressRef.current = elapsed
+
+      if (t >= 1) {
+        const overshoot = Math.max(0, elapsed - effectiveDuration)
+        segmentIndexRef.current += 1
+        setPlaybackIndex(segmentIndexRef.current)
+        pausedProgressRef.current = 0
+
+        if (segmentIndexRef.current >= trackSegments.length) {
+          setInterpolatedPoint(trackPoints[trackPoints.length - 1] ?? null)
+          setAnimationState('completed')
+          return
+        }
+
+        segmentStartTimeRef.current = now - overshoot
+      }
+
+      animationFrameRef.current = window.requestAnimationFrame(step)
+    }
+
+    segmentStartTimeRef.current = performance.now() - pausedProgressRef.current
+    animationFrameRef.current = window.requestAnimationFrame(step)
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+    }
+  }, [animationEnabled, animationState, trackSegments, trackPoints])
 
   useEffect(() => {
     if (!animationEnabled || !mapInstance || !trackPoints.length) {
@@ -217,6 +332,25 @@ export const VehicleMap = memo(function VehicleMap({
     }
   }, [animationEnabled, mapInstance, playbackIndex, trackPoints])
 
+  const cancelAnimationLoop = useCallback(() => {
+    if (animationFrameRef.current !== null) {
+      window.cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+  }, [])
+
+  useEffect(() => cancelAnimationLoop, [cancelAnimationLoop])
+
+  useEffect(() => {
+    if (!animationEnabled) {
+      cancelAnimationLoop()
+      setInterpolatedPoint(null)
+      segmentIndexRef.current = 0
+      pausedProgressRef.current = 0
+      segmentStartTimeRef.current = 0
+    }
+  }, [animationEnabled, cancelAnimationLoop])
+
   const handleStartAnimation = useCallback(() => {
     if (!trackPoints.length) return
     if (trackPoints.length <= 1) {
@@ -224,11 +358,15 @@ export const VehicleMap = memo(function VehicleMap({
       setAnimationState('completed')
       return
     }
-    if (animationState === 'completed') {
+    if (animationState === 'completed' || animationState === 'idle') {
+      segmentIndexRef.current = 0
+      pausedProgressRef.current = 0
+      segmentStartTimeRef.current = 0
       setPlaybackIndex(0)
+      setInterpolatedPoint(trackPoints[0])
     }
     setAnimationState('running')
-  }, [animationState, trackPoints.length])
+  }, [animationState, trackPoints])
 
   const handlePauseAnimation = useCallback(() => {
     if (animationState === 'running') {
@@ -237,10 +375,15 @@ export const VehicleMap = memo(function VehicleMap({
   }, [animationState])
 
   const resetAnimation = useCallback(() => {
+    cancelAnimationLoop()
     setAnimationState('idle')
     setPlaybackIndex(0)
     setPlaybackSpeed(1)
-  }, [])
+    setInterpolatedPoint(null)
+    segmentIndexRef.current = 0
+    pausedProgressRef.current = 0
+    segmentStartTimeRef.current = 0
+  }, [cancelAnimationLoop])
 
   const handleToggleAnimationMode = useCallback(
     (checked: boolean) => {
