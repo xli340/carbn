@@ -9,6 +9,7 @@ import type { Vehicle } from '../types'
 
 interface VehicleListProps {
   vehicles: Vehicle[]
+  trackedVehicle?: Vehicle
   selectedVehicleId?: string
   isLoading: boolean
   onSelectVehicle: (vehicleId: string) => void
@@ -16,10 +17,13 @@ interface VehicleListProps {
   className?: string
   tripActive?: boolean
   onEndTrip?: () => void
+  isHistoryTrackActive?: boolean
+  onExitTracking?: () => void
 }
 
 export function VehicleList({
   vehicles,
+  trackedVehicle,
   selectedVehicleId,
   isLoading,
   onSelectVehicle,
@@ -27,6 +31,8 @@ export function VehicleList({
   className,
   tripActive = false,
   onEndTrip,
+  isHistoryTrackActive = false,
+  onExitTracking,
 }: VehicleListProps) {
   const PAGE_SIZE = 10
   const [page, setPage] = useState(1)
@@ -35,6 +41,7 @@ export function VehicleList({
     setPage(1)
   }, [vehicles.length, isLoading, tripActive])
 
+  const displayTrackingVehicle = isHistoryTrackActive ? trackedVehicle : undefined
   const totalPages = Math.max(1, Math.ceil(vehicles.length / PAGE_SIZE))
   const pagedVehicles = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE
@@ -49,7 +56,11 @@ export function VehicleList({
           <CardDescription>
             {isLoading
               ? 'Loading historical trips…'
-              : `${vehicles.length} demo trips generated from vehicles in view. Click to replay paths.`}
+              : isHistoryTrackActive && displayTrackingVehicle
+                ? `Tracking ${displayTrackingVehicle.name} (${displayTrackingVehicle.registration}).`
+                : isHistoryTrackActive
+                  ? 'Currently tracking a historical route.'
+                : `${vehicles.length} demo trips generated from vehicles in view. Click to replay paths.`}
           </CardDescription>
         </div>
         <Badge variant="secondary" className="whitespace-nowrap text-xs uppercase tracking-wide">
@@ -72,6 +83,28 @@ export function VehicleList({
             <Button size="sm" className="bg-black text-white hover:bg-black/90" onClick={onEndTrip}>
               End trip
             </Button>
+          </div>
+        ) : isHistoryTrackActive ? (
+          <div className="flex h-full flex-col gap-4 px-6 pb-6">
+            {displayTrackingVehicle && (
+              <div className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/40 px-4 py-3 text-sm">
+                <div className="space-y-1 text-left">
+                  <p className="font-semibold text-foreground">Tracking: {displayTrackingVehicle.name}</p>
+                  <p className="text-xs text-muted-foreground">{displayTrackingVehicle.registration}</p>
+                </div>
+                <Button size="sm" className="bg-black text-white hover:bg-black/90" onClick={() => onExitTracking?.()}>
+                  Exit tracking
+                </Button>
+              </div>
+            )}
+            <div className="flex h-[420px] flex-col items-center justify-center gap-3 px-6 text-center text-sm text-muted-foreground">
+              <p>Historical trip list is hidden while tracking a route.</p>
+              {!displayTrackingVehicle && (
+                <Button size="sm" className="bg-black text-white hover:bg-black/90" onClick={() => onExitTracking?.()}>
+                  Exit tracking
+                </Button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex h-full flex-col gap-4 px-6 pb-6">

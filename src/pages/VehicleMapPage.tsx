@@ -22,6 +22,7 @@ export function VehicleMapPage() {
   const vehiclesQuery = useVehiclesLiveQuery(bounds)
   const [trackParams, setTrackParams] = useState<VehicleTrackSearchParams | null>(null)
   const [trackVehicleId, setTrackVehicleId] = useState<string | null>(null)
+  const [trackedVehicleInfo, setTrackedVehicleInfo] = useState<Vehicle | undefined>(undefined)
   const vehicleTrackQuery = useVehicleTrackQuery(trackVehicleId ?? undefined, trackParams ?? undefined)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [historyDialogVehicle, setHistoryDialogVehicle] = useState<Vehicle | undefined>(undefined)
@@ -38,6 +39,14 @@ export function VehicleMapPage() {
   const isTrackActive = displayedTrackPoints.length > 0
   const isHistoryTrackActive = !isLiveTripActive && Boolean(trackVehicleId && trackParams && trackPoints.length)
   const token = useAuthStore((state) => state.token)
+  const trackedVehicle =
+    trackVehicleId && !isLiveTripActive
+      ? trackedVehicleInfo ||
+        vehicles.find((vehicle) => vehicle.vehicle_id === trackVehicleId) ||
+        historyDialogVehicle
+      : undefined
+  const vehiclesForList =
+    isHistoryTrackActive && trackedVehicle ? [trackedVehicle] : vehicles
 
   const handleLivePosition = useCallback(
     (payload: VehicleTrackPoint & { vehicle_id: string }) => {
@@ -81,15 +90,18 @@ export function VehicleMapPage() {
   const handleSubmitHistory = useCallback(
     (vehicleId: string, params: VehicleTrackSearchParams) => {
       setTrackVehicleId(vehicleId)
+      const vehicle = vehicles.find((v) => v.vehicle_id === vehicleId) || historyDialogVehicle
+      setTrackedVehicleInfo(vehicle)
       setTrackParams(params)
       setHistoryDialogOpen(false)
     },
-    [],
+    [historyDialogVehicle, vehicles],
   )
 
   const handleResetTrack = useCallback(() => {
     setTrackVehicleId(null)
     setTrackParams(null)
+    setTrackedVehicleInfo(undefined)
     setSelectedVehicleId(undefined)
     setShowInfoWindow(false)
     setLiveTripTrackPoints([])
@@ -115,6 +127,7 @@ export function VehicleMapPage() {
       setLiveTripTrackPoints([])
       setTrackVehicleId(null)
       setTrackParams(null)
+      setTrackedVehicleInfo(undefined)
       setHistoryDialogOpen(false)
       setShowInfoWindow(true)
     },
@@ -162,6 +175,7 @@ export function VehicleMapPage() {
         hideVehicles={isHistoryTrackActive}
         showTrackEndpoints={isHistoryTrackActive}
         showInfoWindow={showInfoWindow}
+        isHistoryTrackActive={isHistoryTrackActive}
         onBookVehicle={handleBookVehicle}
         onOpenHistory={handleOpenHistory}
         onResetTrack={handleResetTrack}
@@ -170,6 +184,9 @@ export function VehicleMapPage() {
         onDismissInfoWindow={handleDismissInfoWindow}
         onBoundsChange={setBounds}
         onSelectVehicle={handleSelectVehicle}
+        vehiclesForList={vehiclesForList}
+        onExitTracking={handleResetTrack}
+        trackedVehicle={trackedVehicle}
       />
       <VehicleHistoryDialog
         open={historyDialogOpen}

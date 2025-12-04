@@ -7,10 +7,12 @@ import {
   useMap,
   useMapsLibrary,
 } from '@vis.gl/react-google-maps'
-import { LoaderCircle, X } from 'lucide-react'
-import { memo, useCallback, useMemo, useState } from 'react'
+import { LoaderCircle } from 'lucide-react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '@/config/map'
 import type { MapBounds, Vehicle, VehicleTrackPoint } from '../types'
 import { VehicleTrackLayer } from './VehicleTrackLayer'
@@ -40,6 +42,8 @@ type VehicleClusterGroup = {
   centroid: google.maps.LatLngLiteral
   vehicles: Vehicle[]
 }
+
+type AnimationState = 'idle' | 'running' | 'paused' | 'completed'
 
 function clusterRadiusForZoom(zoom: number) {
   if (zoom <= 5) return 1.2
@@ -73,6 +77,10 @@ export const VehicleMap = memo(function VehicleMap({
   showTrackEndpoints = false,
 }: VehicleMapProps) {
   const [mapZoom, setMapZoom] = useState(DEFAULT_MAP_ZOOM)
+  const [isAnimationMode, setIsAnimationMode] = useState(false)
+  const [animationState, setAnimationState] = useState<AnimationState>('idle')
+  const [playbackIndex, setPlaybackIndex] = useState(0)
+  const [playbackSpeed, setPlaybackSpeed] = useState(1)
   const coreLibrary = useMapsLibrary('core')
 
   const selectedVehicle = useMemo(
@@ -109,6 +117,20 @@ export const VehicleMap = memo(function VehicleMap({
   const supportsAdvancedMarkers = Boolean(normalizedMapId)
   const mapInstance = useMap()
 
+  const animationEnabled = isAnimationMode && trackPoints.length > 0
+
+  const currentAnimatedPoint = useMemo(() => {
+    if (!animationEnabled) return null
+    const clampedIndex = Math.min(playbackIndex, trackPoints.length - 1)
+    return trackPoints[clampedIndex]
+  }, [animationEnabled, playbackIndex, trackPoints])
+
+  const animatedTrail = useMemo(() => {
+    if (!animationEnabled) return []
+    const endIndex = Math.min(playbackIndex, trackPoints.length - 1)
+    return trackPoints.slice(0, endIndex + 1)
+  }, [animationEnabled, playbackIndex, trackPoints])
+
   const clusterRadius = useMemo(() => clusterRadiusForZoom(mapZoom), [mapZoom])
 
   const groupedVehicles = useMemo<VehicleClusterGroup[]>(() => {
@@ -141,6 +163,106 @@ export const VehicleMap = memo(function VehicleMap({
     return groups
   }, [clusterRadius, vehicles])
 
+  useEffect(() => {
+    if (!animationEnabled || !mapInstance || !trackPoints.length) {
+      return
+    }
+
+    if (trackPoints.length === 1) {
+      const startPoint = trackPoints[0]
+      mapInstance.panTo({ lat: startPoint.lat, lng: startPoint.lng })
+      const currentZoom = mapInstance.getZoom?.() ?? DEFAULT_MAP_ZOOM
+      mapInstance.setZoom(Math.max(currentZoom, 14))
+      return
+    }
+
+    const bounds = new google.maps.LatLngBounds()
+    trackPoints.forEach((point) => bounds.extend({ lat: point.lat, lng: point.lng }))
+    mapInstance.fitBounds(bounds, 80)
+    const currentZoom = mapInstance.getZoom?.()
+    if (currentZoom) {
+      const clampedZoom = Math.min(Math.max(currentZoom, 13), 15)
+      mapInstance.setZoom(clampedZoom)
+    }
+  }, [animationEnabled, mapInstance, trackPoints])
+
+  useEffect(() => {
+    if (!animationEnabled || animationState !== 'running') {
+      return
+    }
+
+    const stepMs = Math.max(120, 700 / playbackSpeed)
+    const timer = window.setInterval(() => {
+      setPlaybackIndex((current) => {
+        const nextIndex = current + 1
+        if (nextIndex >= trackPoints.length) {
+          window.clearInterval(timer)
+          setAnimationState('completed')
+          return trackPoints.length - 1
+        }
+        return nextIndex
+      })
+    }, stepMs)
+
+    return () => window.clearInterval(timer)
+  }, [animationEnabled, animationState, playbackSpeed, trackPoints])
+
+  useEffect(() => {
+    if (!animationEnabled || !mapInstance || !trackPoints.length) {
+      return
+    }
+    const activePoint = trackPoints[Math.min(playbackIndex, trackPoints.length - 1)]
+    if (activePoint) {
+      mapInstance.panTo({ lat: activePoint.lat, lng: activePoint.lng })
+    }
+  }, [animationEnabled, mapInstance, playbackIndex, trackPoints])
+
+  const handleStartAnimation = useCallback(() => {
+    if (!trackPoints.length) return
+    if (trackPoints.length <= 1) {
+      setPlaybackIndex(trackPoints.length - 1)
+      setAnimationState('completed')
+      return
+    }
+    if (animationState === 'completed') {
+      setPlaybackIndex(0)
+    }
+    setAnimationState('running')
+  }, [animationState, trackPoints.length])
+
+  const handlePauseAnimation = useCallback(() => {
+    if (animationState === 'running') {
+      setAnimationState('paused')
+    }
+  }, [animationState])
+
+  const resetAnimation = useCallback(() => {
+    setAnimationState('idle')
+    setPlaybackIndex(0)
+    setPlaybackSpeed(1)
+  }, [])
+
+  const handleToggleAnimationMode = useCallback(
+    (checked: boolean) => {
+      setIsAnimationMode(checked)
+      resetAnimation()
+    },
+    [resetAnimation],
+  )
+
+  const adjustPlaybackSpeed = useCallback((delta: number) => {
+    setPlaybackSpeed((current) => {
+      const next = Math.min(Math.max(0.5, Number((current + delta).toFixed(1))), 4)
+      return next
+    })
+  }, [])
+
+  const handleExitAnimation = useCallback(() => {
+    setIsAnimationMode(false)
+    resetAnimation()
+    onResetTrack?.()
+  }, [onResetTrack, resetAnimation])
+
   const markerColorFor = useCallback(
     (vehicle: Vehicle) => {
       if (activeTripVehicleId && vehicle.vehicle_id === activeTripVehicleId) {
@@ -153,6 +275,112 @@ export const VehicleMap = memo(function VehicleMap({
 
   return (
     <div className="relative h-full w-full min-w-0">
+      {(trackPoints.length > 0 || isTrackActive) && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center px-3 md:top-4 md:bottom-auto md:justify-end md:px-4">
+          <div className="flex w-full max-w-[520px] flex-col items-stretch gap-2 md:max-w-[420px] md:items-end">
+            <div className="pointer-events-auto flex w-full flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/90 px-3 py-2 shadow-sm md:w-[420px]">
+              <div className="space-y-0.5">
+                <p className="text-xs font-semibold leading-none text-foreground">Track playback</p>
+                <p className="text-[11px] text-muted-foreground">Choose how to view history</p>
+              </div>
+              <div className="flex items-center gap-2">
+              <Label htmlFor="track-animation-mode" className="text-[11px] text-muted-foreground">
+                Off
+              </Label>
+              <Switch
+                id="track-animation-mode"
+                checked={isAnimationMode}
+                onCheckedChange={handleToggleAnimationMode}
+              />
+              <Label
+                htmlFor="track-animation-mode"
+                className="text-[11px] font-medium text-foreground"
+              >
+                Animation
+              </Label>
+            </div>
+            </div>
+
+            {animationEnabled && (
+              <div className="pointer-events-auto flex w-full flex-col gap-2 rounded-lg border bg-background/90 px-3 py-2 shadow-sm md:w-[420px]">
+                <div className="grid w-full grid-cols-5 gap-2 md:gap-3">
+                  <Button
+                    size="sm"
+                    className="h-8 min-w-0 px-2 text-xs"
+                    onClick={handleStartAnimation}
+                    disabled={animationState === 'running'}
+                  >
+                    {animationState === 'completed' ? 'Replay' : 'Start'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-8 min-w-0 px-2 text-xs"
+                    variant="secondary"
+                    onClick={handlePauseAnimation}
+                    disabled={animationState !== 'running'}
+                  >
+                    Pause
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-8 min-w-0 px-2 text-xs"
+                    variant="secondary"
+                    onClick={() => adjustPlaybackSpeed(-0.5)}
+                    disabled={playbackSpeed <= 0.5}
+                  >
+                    Slow
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-8 min-w-0 px-2 text-xs"
+                    variant="secondary"
+                    onClick={() => adjustPlaybackSpeed(0.5)}
+                    disabled={playbackSpeed >= 4}
+                  >
+                    Fast
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-8 min-w-0 px-2 text-xs"
+                    variant="destructive"
+                    onClick={handleExitAnimation}
+                  >
+                    Exit
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>Speed {playbackSpeed.toFixed(1)}x</span>
+                  <span>
+                    ·{' '}
+                    {animationState === 'running'
+                      ? 'Playing'
+                      : animationState === 'paused'
+                        ? 'Paused'
+                        : animationState === 'completed'
+                          ? 'Completed'
+                          : 'Ready'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {!animationEnabled && onResetTrack && (
+              <div className="pointer-events-auto flex w-full flex-wrap items-center gap-2 rounded-lg border bg-background/90 px-3 py-2 shadow-sm md:w-[420px]">
+                <Button
+                  size="sm"
+                  className="h-8 min-w-0 px-2 text-xs"
+                  variant="destructive"
+                  onClick={handleExitAnimation}
+                >
+                  Exit
+                </Button>
+                <span className="text-xs text-muted-foreground">Clear current track view</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <Map
         defaultZoom={DEFAULT_MAP_ZOOM}
         defaultCenter={DEFAULT_MAP_CENTER}
@@ -262,53 +490,100 @@ export const VehicleMap = memo(function VehicleMap({
               )
             }))}
 
-        {!!trackPoints.length && <VehicleTrackLayer points={trackPoints} fitToPath={fitTrackToView} />}
-
-        {showTrackEndpoints && trackPoints.length > 0 && (
+        {animationEnabled ? (
           <>
-            {supportsAdvancedMarkers ? (
-              <>
+            {animatedTrail.length > 1 && (
+              <VehicleTrackLayer points={animatedTrail} color="#ef4444" fitToPath={false} />
+            )}
+
+            {currentAnimatedPoint &&
+              (supportsAdvancedMarkers ? (
                 <AdvancedMarker
-                  position={{ lat: trackPoints[0].lat, lng: trackPoints[0].lng }}
-                  title="Start"
+                  position={{ lat: currentAnimatedPoint.lat, lng: currentAnimatedPoint.lng }}
+                  title="Playback vehicle"
                 >
-                  <TrackPin label="Start" color="#10b981" />
+                  <VehicleMarkerIcon
+                    heading={
+                      Number.isFinite(currentAnimatedPoint.heading) ? currentAnimatedPoint.heading : 0
+                    }
+                    selected={false}
+                    color="#111111"
+                  />
                 </AdvancedMarker>
-                <AdvancedMarker
-                  position={{ lat: trackPoints[trackPoints.length - 1].lat, lng: trackPoints[trackPoints.length - 1].lng }}
-                  title="End"
-                >
-                  <TrackPin label="End" color="#ef4444" />
-                </AdvancedMarker>
-              </>
-            ) : (
-              <>
+              ) : (
                 <Marker
-                  position={{ lat: trackPoints[0].lat, lng: trackPoints[0].lng }}
-                  label={{ text: 'Start', color: '#ffffff', fontWeight: '600' }}
+                  position={{ lat: currentAnimatedPoint.lat, lng: currentAnimatedPoint.lng }}
                   icon={
                     coreLibrary
                       ? {
-                          url: buildTrackPinIcon('#10b981'),
-                          scaledSize: new coreLibrary.Size(36, 50),
-                          anchor: new coreLibrary.Point(18, 46),
+                          url: buildFallbackMarkerIcon(
+                            '#111111',
+                            Number.isFinite(currentAnimatedPoint.heading)
+                              ? currentAnimatedPoint.heading
+                              : 0,
+                            false,
+                          ),
+                          scaledSize: new coreLibrary.Size(32, 32),
+                          anchor: new coreLibrary.Point(16, 24),
                         }
                       : undefined
                   }
                 />
-                <Marker
-                  position={{ lat: trackPoints[trackPoints.length - 1].lat, lng: trackPoints[trackPoints.length - 1].lng }}
-                  label={{ text: 'End', color: '#ffffff', fontWeight: '600' }}
-                  icon={
-                    coreLibrary
-                      ? {
-                          url: buildTrackPinIcon('#ef4444'),
-                          scaledSize: new coreLibrary.Size(36, 50),
-                          anchor: new coreLibrary.Point(18, 46),
-                        }
-                      : undefined
-                  }
-                />
+              ))}
+          </>
+        ) : (
+          <>
+            {!!trackPoints.length && (
+              <VehicleTrackLayer points={trackPoints} fitToPath={fitTrackToView} />
+            )}
+
+            {showTrackEndpoints && trackPoints.length > 0 && (
+              <>
+                {supportsAdvancedMarkers ? (
+                  <>
+                    <AdvancedMarker
+                      position={{ lat: trackPoints[0].lat, lng: trackPoints[0].lng }}
+                      title="Start"
+                    >
+                      <TrackPin label="Start" color="#10b981" />
+                    </AdvancedMarker>
+                    <AdvancedMarker
+                      position={{ lat: trackPoints[trackPoints.length - 1].lat, lng: trackPoints[trackPoints.length - 1].lng }}
+                      title="End"
+                    >
+                      <TrackPin label="End" color="#ef4444" />
+                    </AdvancedMarker>
+                  </>
+                ) : (
+                  <>
+                    <Marker
+                      position={{ lat: trackPoints[0].lat, lng: trackPoints[0].lng }}
+                      label={{ text: 'Start', color: '#ffffff', fontWeight: '600' }}
+                      icon={
+                        coreLibrary
+                          ? {
+                              url: buildTrackPinIcon('#10b981'),
+                              scaledSize: new coreLibrary.Size(36, 50),
+                              anchor: new coreLibrary.Point(18, 46),
+                            }
+                          : undefined
+                      }
+                    />
+                    <Marker
+                      position={{ lat: trackPoints[trackPoints.length - 1].lat, lng: trackPoints[trackPoints.length - 1].lng }}
+                      label={{ text: 'End', color: '#ffffff', fontWeight: '600' }}
+                      icon={
+                        coreLibrary
+                          ? {
+                              url: buildTrackPinIcon('#ef4444'),
+                              scaledSize: new coreLibrary.Size(36, 50),
+                              anchor: new coreLibrary.Point(18, 46),
+                            }
+                          : undefined
+                      }
+                    />
+                  </>
+                )}
               </>
             )}
           </>
@@ -340,20 +615,6 @@ export const VehicleMap = memo(function VehicleMap({
             <LoaderCircle className="h-4 w-4 animate-spin" />
             Syncing vehicles…
           </div>
-        </div>
-      )}
-
-      {isTrackActive && onResetTrack && (
-        <div className="absolute right-4 top-4 z-10">
-          <Button
-            size="sm"
-            className="bg-black text-white hover:bg-black/90"
-            variant="secondary"
-            onClick={onResetTrack}
-          >
-            <X className="mr-2 h-4 w-4" />
-            Reset track
-          </Button>
         </div>
       )}
     </div>
