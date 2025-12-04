@@ -16,10 +16,9 @@ export function useLiveVehicleUpdates({ vehicleIds, queryKey, enabled = true }: 
   const queryClient = useQueryClient()
   const token = useAuthStore((state) => state.token)
 
-  const subscriptionKey = useMemo(() => [...vehicleIds].sort().join(','), [vehicleIds])
   const sortedVehicleIds = useMemo(
     () => [...new Set(vehicleIds)].sort(),
-    [subscriptionKey],
+    [vehicleIds],
   )
   const socketRef = useRef<WebSocket | null>(null)
   const queryKeyRef = useRef<QueryKey>(queryKey)

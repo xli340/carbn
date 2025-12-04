@@ -1,4 +1,5 @@
 import { APIProvider } from '@vis.gl/react-google-maps'
+import { useCallback, useState } from 'react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { env } from '@/config/env'
@@ -8,6 +9,8 @@ import { useVehicleSelectionStore } from '@/features/vehicles/stores/vehicle-sel
 import { VehicleMapLayout } from '@/features/vehicles/components/VehicleMapLayout'
 import { useVehiclesLiveQuery, useVehicleTrackQuery, vehiclesKeys } from '@/features/vehicles/hooks/useVehicleQueries'
 import { useLiveVehicleUpdates } from '@/features/vehicles/hooks/useLiveVehicleUpdates'
+import { VehicleHistoryDialog } from '@/features/vehicles/components/VehicleHistoryDialog'
+import type { Vehicle, VehicleTrackSearchParams } from '@/features/vehicles/types'
 
 export function VehicleMapPage() {
   const bounds = useVehicleSelectionStore((state) => state.bounds)
@@ -16,10 +19,16 @@ export function VehicleMapPage() {
   const setSelectedVehicleId = useVehicleSelectionStore((state) => state.setSelectedVehicleId)
 
   const vehiclesQuery = useVehiclesLiveQuery(bounds)
-  const vehicleTrackQuery = useVehicleTrackQuery(selectedVehicleId)
+  const [trackParams, setTrackParams] = useState<VehicleTrackSearchParams | null>(null)
+  const [trackVehicleId, setTrackVehicleId] = useState<string | null>(null)
+  const vehicleTrackQuery = useVehicleTrackQuery(trackVehicleId ?? undefined, trackParams ?? undefined)
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
+  const [historyDialogVehicle, setHistoryDialogVehicle] = useState<Vehicle | undefined>(undefined)
+  const [showInfoWindow, setShowInfoWindow] = useState(true)
 
   const vehicles = vehiclesQuery.data?.vehicles ?? []
-  const trackPoints = vehicleTrackQuery.data?.points ?? []
+  const trackPoints = trackVehicleId && trackParams ? vehicleTrackQuery.data?.points ?? [] : []
+  const isTrackActive = trackPoints.length > 0
   const token = useAuthStore((state) => state.token)
 
   useLiveVehicleUpdates({
@@ -27,6 +36,40 @@ export function VehicleMapPage() {
     queryKey: vehiclesKeys.live(bounds),
     enabled: Boolean(token),
   })
+
+  const handleSelectVehicle = useCallback(
+    (vehicleId?: string) => {
+      setSelectedVehicleId(vehicleId)
+      setShowInfoWindow(true)
+    },
+    [setSelectedVehicleId],
+  )
+
+  const handleOpenHistory = useCallback((vehicle: Vehicle) => {
+    setHistoryDialogVehicle(vehicle)
+    setHistoryDialogOpen(true)
+    setShowInfoWindow(false)
+  }, [])
+
+  const handleSubmitHistory = useCallback(
+    (vehicleId: string, params: VehicleTrackSearchParams) => {
+      setTrackVehicleId(vehicleId)
+      setTrackParams(params)
+      setHistoryDialogOpen(false)
+    },
+    [],
+  )
+
+  const handleResetTrack = useCallback(() => {
+    setTrackVehicleId(null)
+    setTrackParams(null)
+    setSelectedVehicleId(undefined)
+    setShowInfoWindow(false)
+  }, [setSelectedVehicleId])
+
+  const handleDismissInfoWindow = useCallback(() => {
+    setShowInfoWindow(false)
+  }, [])
 
   if (!env.googleMapsApiKey) {
     return <MissingGoogleMapsKeyNotice />
@@ -41,8 +84,22 @@ export function VehicleMapPage() {
         selectedVehicleId={selectedVehicleId}
         isLoadingVehicles={vehiclesQuery.isLoading}
         mapId={DEFAULT_MAP_ID}
+        isTrackActive={isTrackActive}
+        showInfoWindow={showInfoWindow}
+        onOpenHistory={handleOpenHistory}
+        onResetTrack={handleResetTrack}
+        onDismissInfoWindow={handleDismissInfoWindow}
         onBoundsChange={setBounds}
-        onSelectVehicle={setSelectedVehicleId}
+        onSelectVehicle={handleSelectVehicle}
+      />
+      <VehicleHistoryDialog
+        open={historyDialogOpen}
+        vehicle={historyDialogVehicle}
+        isSubmitting={vehicleTrackQuery.isFetching}
+        trackActive={isTrackActive}
+        onOpenChange={setHistoryDialogOpen}
+        onSubmit={handleSubmitHistory}
+        onResetTrack={handleResetTrack}
       />
     </APIProvider>
   )

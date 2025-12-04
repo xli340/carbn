@@ -1,14 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 
 import { fetchVehicleTrackHistory, fetchVehiclesWithinBounds } from '../api/fleet'
-import type { MapBounds } from '../types'
-
-const TRACK_HISTORY_WINDOW = 'now-24h'
+import type { MapBounds, VehicleTrackSearchParams } from '../types'
 
 export const vehiclesKeys = {
   all: ['vehicles'] as const,
   live: (bounds: MapBounds) => ['vehicles', 'live', bounds] as const,
-  track: (vehicleId?: string) => ['vehicles', 'track', vehicleId, TRACK_HISTORY_WINDOW] as const,
+  track: (vehicleId?: string, params?: VehicleTrackSearchParams) =>
+    ['vehicles', 'track', vehicleId, params?.from, params?.to] as const,
 }
 
 export function useVehiclesLiveQuery(bounds: MapBounds, enabled = true) {
@@ -21,11 +20,17 @@ export function useVehiclesLiveQuery(bounds: MapBounds, enabled = true) {
   })
 }
 
-export function useVehicleTrackQuery(vehicleId: string | undefined) {
+export function useVehicleTrackQuery(vehicleId: string | undefined, params?: VehicleTrackSearchParams) {
   return useQuery({
-    queryKey: vehiclesKeys.track(vehicleId),
-    queryFn: () => fetchVehicleTrackHistory(vehicleId!, TRACK_HISTORY_WINDOW),
-    enabled: Boolean(vehicleId),
+    queryKey: vehiclesKeys.track(vehicleId, params),
+    queryFn: () => {
+      if (!vehicleId || !params) {
+        throw new Error('Vehicle and time range are required for track history')
+      }
+
+      return fetchVehicleTrackHistory(vehicleId, params)
+    },
+    enabled: Boolean(vehicleId && params?.from),
     staleTime: 5 * 60 * 1000,
   })
 }

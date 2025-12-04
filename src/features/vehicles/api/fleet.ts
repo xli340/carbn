@@ -1,4 +1,10 @@
-import type { MapBounds, Vehicle, VehicleResponse, VehicleTrackResponse } from '../types'
+import type {
+  MapBounds,
+  Vehicle,
+  VehicleResponse,
+  VehicleTrackResponse,
+  VehicleTrackSearchParams,
+} from '../types'
 import { apiRequest } from '@/lib/api-client'
 
 const MAX_LAT_SPAN = 5
@@ -71,15 +77,17 @@ function splitBounds(bounds: MapBounds): MapBounds[] {
   ].flatMap(splitBounds)
 }
 
-const TRACK_HISTORY_WINDOW = 'now-24h'
-
-export async function fetchVehicleTrackHistory(vehicleId: string, range = TRACK_HISTORY_WINDOW) {
-  const params = new URLSearchParams({
-    from: range,
+export async function fetchVehicleTrackHistory(vehicleId: string, params: VehicleTrackSearchParams) {
+  const searchParams = new URLSearchParams({
+    from: params.from,
   })
 
+  if (params.to) {
+    searchParams.set('to', params.to)
+  }
+
   const response = await apiRequest<VehicleTrackResponse>(
-    `/api/v1/fleet/vehicles/${vehicleId}/track?${params.toString()}`,
+    `/api/v1/fleet/vehicles/${vehicleId}/track?${searchParams.toString()}`,
   )
 
   return response.data

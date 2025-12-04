@@ -1,8 +1,9 @@
 import type { MapCameraChangedEvent } from '@vis.gl/react-google-maps'
 import { AdvancedMarker, InfoWindow, Map, Marker, useMap } from '@vis.gl/react-google-maps'
-import { LoaderCircle } from 'lucide-react'
+import { LoaderCircle, X } from 'lucide-react'
 import { memo, useCallback, useMemo, useState } from 'react'
 
+import { Button } from '@/components/ui/button'
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '@/config/map'
 import type { MapBounds, Vehicle, VehicleTrackPoint } from '../types'
 import { VehicleTrackLayer } from './VehicleTrackLayer'
@@ -16,6 +17,12 @@ interface VehicleMapProps {
   mapId?: string
   onSelectVehicle?: (vehicleId?: string) => void
   onBoundsChange?: (bounds: MapBounds) => void
+  onOpenHistory?: (vehicle: Vehicle) => void
+  onDismissInfoWindow?: () => void
+  showInfoWindow?: boolean
+  isTrackActive?: boolean
+  onResetTrack?: () => void
+  fitTrackToView?: boolean
 }
 
 type VehicleClusterGroup = {
@@ -43,6 +50,12 @@ export const VehicleMap = memo(function VehicleMap({
   mapId,
   onSelectVehicle,
   onBoundsChange,
+  onOpenHistory,
+  onDismissInfoWindow,
+  showInfoWindow = true,
+  isTrackActive,
+  onResetTrack,
+  fitTrackToView = true,
 }: VehicleMapProps) {
   const [mapZoom, setMapZoom] = useState(DEFAULT_MAP_ZOOM)
 
@@ -220,19 +233,19 @@ export const VehicleMap = memo(function VehicleMap({
               )
             })}
 
-        {!!trackPoints.length && <VehicleTrackLayer points={trackPoints} />}
+        {!!trackPoints.length && <VehicleTrackLayer points={trackPoints} fitToPath={fitTrackToView} />}
 
-        {selectedVehicle && (
+        {selectedVehicle && showInfoWindow && (
           <InfoWindow
             position={{
               lat: selectedVehicle.lat,
               lng: selectedVehicle.lng,
             }}
             onClose={() => {
-              onSelectVehicle?.(undefined)
+              onDismissInfoWindow?.()
             }}
           >
-            <VehicleInfo vehicle={selectedVehicle} />
+            <VehicleInfo vehicle={selectedVehicle} onOpenHistory={() => onOpenHistory?.(selectedVehicle)} />
           </InfoWindow>
         )}
       </Map>
@@ -245,22 +258,55 @@ export const VehicleMap = memo(function VehicleMap({
           </div>
         </div>
       )}
+
+      {isTrackActive && onResetTrack && (
+        <div className="absolute right-4 top-4 z-10">
+          <Button
+            size="sm"
+            className="bg-black text-white hover:bg-black/90"
+            variant="secondary"
+            onClick={onResetTrack}
+          >
+            <X className="mr-2 h-4 w-4" />
+            Reset track
+          </Button>
+        </div>
+      )}
     </div>
   )
 })
 
-function VehicleInfo({ vehicle }: { vehicle: Vehicle }) {
+function VehicleInfo({ vehicle, onOpenHistory }: { vehicle: Vehicle; onOpenHistory: () => void }) {
   const speedDisplay =
     typeof vehicle.speed === 'number' && Number.isFinite(vehicle.speed)
       ? `${vehicle.speed.toFixed(1)} km/h`
       : 'Speed unavailable'
+  const lastUpdated = vehicle.timestamp ? new Date(vehicle.timestamp).toLocaleString() : 'Unknown'
+  const ignitionLabel = vehicle.ignition_on ? 'Ignition on' : 'Ignition off'
+  const ignitionColor = vehicle.ignition_on ? 'text-emerald-600' : 'text-muted-foreground'
   return (
-    <div className="min-w-[180px] text-sm">
-      <p className="font-semibold">{vehicle.name}</p>
-      <p className="text-muted-foreground">{vehicle.registration}</p>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {speedDisplay} &middot; Heading {vehicle.heading ?? '—'}°
-      </p>
+    <div className="min-w-[240px] space-y-3 text-sm">
+      <div className="space-y-1">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">Selected vehicle</p>
+        <p className="text-base font-semibold leading-tight">{vehicle.name}</p>
+        <p className="text-xs text-muted-foreground">{vehicle.registration}</p>
+      </div>
+      <div className="space-y-1 text-xs text-muted-foreground">
+        <p>
+          {speedDisplay} &middot; Heading {vehicle.heading ?? '—'}°
+        </p>
+        <p className={ignitionColor}>{ignitionLabel}</p>
+        <p>Updated {lastUpdated}</p>
+      </div>
+      <div className="flex justify-center">
+        <Button
+          size="sm"
+          className="w-full bg-black text-white hover:bg-black/90"
+          onClick={onOpenHistory}
+        >
+          History
+        </Button>
+      </div>
     </div>
   )
 }
@@ -269,7 +315,7 @@ function VehicleMarkerIcon({ heading, selected }: { heading: number; selected: b
   return (
     <div className="flex h-8 w-8 items-center justify-center drop-shadow-lg" style={{ transform: `rotate(${heading}deg)` }}>
       <svg width="64" height="64" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-        <path d="M10,4 C10,2.5 11.5,1 16,1 C20.5,1 22,2.5 22,4 L24,10 L24,26 C24,28.5 22.5,30 20,30 L12,30 C9.5,30 8,28.5 8,26 L8,10 L10,4 Z" fill={selected ? '#22c55e' : '#333333'} />
+        <path d="M10,4 C10,2.5 11.5,1 16,1 C20.5,1 22,2.5 22,4 L24,10 L24,26 C24,28.5 22.5,30 20,30 L12,30 C9.5,30 8,28.5 8,26 L8,10 L10,4 Z" fill={selected ? '#ef4444' : '#333333'} />
         <path d="M11,10 L21,10 L22,24 L10,24 L11,10 Z" fill="#2F80ED" />
         <path d="M12,11 L20,11 L19,16 L13,16 L12,11 Z" fill="#FFFFFF" opacity="0.7" />
         <path d="M13,20 L19,20 L18.5,23 L13.5,23 L13,20 Z" fill="#FFFFFF" opacity="0.7" />
@@ -279,7 +325,7 @@ function VehicleMarkerIcon({ heading, selected }: { heading: number; selected: b
 }
 
 function buildFallbackMarkerIcon(selected: boolean, heading: number) {
-  const bodyColor = selected ? '#22c55e' : '#333333'
+  const bodyColor = selected ? '#ef4444' : '#333333'
   const svg = `
     <svg width="64" height="64" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
       <g transform="rotate(${heading},16,16)">

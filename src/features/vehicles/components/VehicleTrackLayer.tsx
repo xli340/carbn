@@ -6,9 +6,10 @@ import type { VehicleTrackPoint } from '../types'
 interface VehicleTrackLayerProps {
   points: VehicleTrackPoint[]
   color?: string
+  fitToPath?: boolean
 }
 
-export function VehicleTrackLayer({ points, color = '#22c55e' }: VehicleTrackLayerProps) {
+export function VehicleTrackLayer({ points, color = '#ef4444', fitToPath = false }: VehicleTrackLayerProps) {
   const map = useMap()
   const path = useMemo(
     () => points.map((point) => ({ lat: point.lat, lng: point.lng })),
@@ -32,6 +33,31 @@ export function VehicleTrackLayer({ points, color = '#22c55e' }: VehicleTrackLay
       polyline.setMap(null)
     }
   }, [map, path, color])
+
+  useEffect(() => {
+    if (!map || !fitToPath || !path.length) {
+      return
+    }
+
+    if (path.length === 1) {
+      map.panTo(path[0])
+      if (map.getZoom) {
+        const currentZoom = map.getZoom() ?? 0
+        const targetZoom = Math.min(currentZoom || 12, 11)
+        map.setZoom(targetZoom || 11)
+      }
+      return
+    }
+
+    const bounds = new google.maps.LatLngBounds()
+    path.forEach((point) => bounds.extend(point))
+    map.fitBounds(bounds, 220)
+
+    const currentZoom = map.getZoom ? map.getZoom() : undefined
+    if (currentZoom && currentZoom > 12) {
+      map.setZoom(12)
+    }
+  }, [fitToPath, map, path])
 
   return null
 }

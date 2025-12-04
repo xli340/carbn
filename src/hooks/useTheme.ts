@@ -24,14 +24,14 @@ function getSystemTheme(): ResolvedTheme {
   return window.matchMedia(DARK_MODE_MEDIA_QUERY).matches ? 'dark' : 'light'
 }
 
-function resolveTheme(theme: Theme): ResolvedTheme {
-  return theme === 'system' ? getSystemTheme() : theme
-}
-
 export function useTheme() {
   const initialTheme = useMemo(() => getStoredTheme() ?? 'system', [])
   const [theme, setThemeState] = useState<Theme>(initialTheme)
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => resolveTheme(initialTheme))
+  const [systemTheme, setSystemTheme] = useState<ResolvedTheme>(() => getSystemTheme())
+  const resolvedTheme = useMemo(
+    () => (theme === 'system' ? systemTheme : theme),
+    [theme, systemTheme],
+  )
 
   const applyTheme = useCallback((next: ResolvedTheme) => {
     if (typeof document === 'undefined') {
@@ -46,13 +46,11 @@ export function useTheme() {
   }, [])
 
   useEffect(() => {
-    const nextResolved = resolveTheme(theme)
-    setResolvedTheme(nextResolved)
-    applyTheme(nextResolved)
+    applyTheme(resolvedTheme)
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(THEME_STORAGE_KEY, theme)
     }
-  }, [theme, applyTheme])
+  }, [resolvedTheme, theme, applyTheme])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -60,11 +58,9 @@ export function useTheme() {
     }
     const media = window.matchMedia(DARK_MODE_MEDIA_QUERY)
     const handleChange = (event: MediaQueryListEvent) => {
-      if (theme === 'system') {
-        const next = event.matches ? 'dark' : 'light'
-        setResolvedTheme(next)
-        applyTheme(next)
-      }
+      if (theme !== 'system') return
+      const next = event.matches ? 'dark' : 'light'
+      setSystemTheme(next)
     }
     media.addEventListener('change', handleChange)
     return () => media.removeEventListener('change', handleChange)

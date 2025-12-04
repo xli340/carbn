@@ -11,7 +11,12 @@ interface VehicleMapLayoutProps {
   isLoadingVehicles: boolean
   selectedVehicleId?: string
   mapId?: string
+  showInfoWindow?: boolean
+  isTrackActive?: boolean
   onSelectVehicle: (vehicleId?: string) => void
+  onOpenHistory: (vehicle: Vehicle) => void
+  onResetTrack: () => void
+  onDismissInfoWindow: () => void
   onBoundsChange: (bounds: MapBounds) => void
 }
 
@@ -23,6 +28,11 @@ export function VehicleMapLayout({
   selectedVehicleId,
   mapId,
   onSelectVehicle,
+  onOpenHistory,
+  showInfoWindow,
+  isTrackActive,
+  onResetTrack,
+  onDismissInfoWindow,
   onBoundsChange,
 }: VehicleMapLayoutProps) {
   return (
@@ -37,6 +47,11 @@ export function VehicleMapLayout({
               trackPoints={trackPoints}
               isLoading={isLoadingVehicles}
               mapId={mapId}
+              onOpenHistory={onOpenHistory}
+              onDismissInfoWindow={onDismissInfoWindow}
+              showInfoWindow={showInfoWindow}
+              isTrackActive={isTrackActive}
+              onResetTrack={onResetTrack}
               onBoundsChange={onBoundsChange}
               onSelectVehicle={onSelectVehicle}
             />
@@ -47,6 +62,7 @@ export function VehicleMapLayout({
           vehicles={vehicles}
           isLoading={isLoadingVehicles}
           selectedVehicleId={selectedVehicleId}
+          onOpenHistory={onOpenHistory}
           onSelectVehicle={onSelectVehicle}
         />
       </div>

@@ -26,6 +26,11 @@ export interface VehicleTrackPoint extends LatLng {
   timestamp: string
 }
 
+export interface VehicleTrackSearchParams {
+  from: string
+  to?: string
+}
+
 export interface VehicleTrack {
   vehicle_id: string
   vehicle: {
