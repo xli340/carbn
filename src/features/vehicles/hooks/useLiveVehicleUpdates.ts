@@ -13,6 +13,45 @@ interface UseLiveVehicleUpdatesArgs {
   onPositionUpdate?: (payload: VehiclePositionUpdate) => void
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function parsePositionUpdateMessage(data: unknown): (VehiclePositionUpdate & { type: string }) | null {
+  try {
+    const parsed = typeof data === 'string' ? JSON.parse(data) : data
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+    const payload = parsed as Record<string, unknown>
+    if (payload.type !== 'position_update') {
+      return null
+    }
+    if (
+      typeof payload.vehicle_id !== 'string' ||
+      !isFiniteNumber(payload.lat) ||
+      !isFiniteNumber(payload.lng) ||
+      !isFiniteNumber(payload.speed) ||
+      typeof payload.timestamp !== 'string'
+    ) {
+      return null
+    }
+
+    return {
+      type: 'position_update',
+      vehicle_id: payload.vehicle_id,
+      lat: payload.lat,
+      lng: payload.lng,
+      speed: payload.speed,
+      heading: isFiniteNumber(payload.heading) ? payload.heading : 0,
+      timestamp: payload.timestamp,
+    }
+  } catch (error) {
+    console.error('[ws] Failed to parse position update', error)
+    return null
+  }
+}
+
 export function useLiveVehicleUpdates({
   vehicleIds,
   queryKey,
@@ -42,64 +81,61 @@ export function useLiveVehicleUpdates({
     socketRef.current = socket
 
     const handleMessage = (event: MessageEvent) => {
-      try {
-        const payload = JSON.parse(event.data) as VehiclePositionUpdate & { type: string }
-        if (payload.type !== 'position_update') {
-          return
-        }
-
-        queryClient.setQueryData<{ vehicles: Vehicle[]; count: number } | undefined>(
-          queryKeyRef.current,
-          (current) => {
-            if (!current) {
-              return current
-            }
-
-            const vehicles = current.vehicles.some(
-              (vehicle) => vehicle.vehicle_id === payload.vehicle_id,
-            )
-              ? current.vehicles.map((vehicle) =>
-                  vehicle.vehicle_id === payload.vehicle_id
-                    ? {
-                        ...vehicle,
-                        lat: payload.lat,
-                        lng: payload.lng,
-                        speed: payload.speed,
-                        heading: payload.heading,
-                        timestamp: payload.timestamp,
-                      }
-                    : vehicle,
-                )
-              : [
-                  ...current.vehicles,
-                  {
-                    vehicle_id: payload.vehicle_id,
-                    registration: payload.vehicle_id,
-                    name: payload.vehicle_id,
-                    lat: payload.lat,
-                    lng: payload.lng,
-                    speed: payload.speed,
-                    heading: payload.heading,
-                    ignition_on: true,
-                    timestamp: payload.timestamp,
-                  },
-                ]
-
-            return { ...current, vehicles }
-          },
-        )
-
-        onPositionUpdate?.({
-          vehicle_id: payload.vehicle_id,
-          lat: payload.lat,
-          lng: payload.lng,
-          speed: payload.speed,
-          heading: payload.heading,
-          timestamp: payload.timestamp,
-        })
-      } catch (error) {
-        console.error('[ws] Failed to process payload', error)
+      const payload = parsePositionUpdateMessage(event.data)
+      if (!payload) {
+        return
       }
+      const positionUpdate: VehiclePositionUpdate = {
+        vehicle_id: payload.vehicle_id,
+        lat: payload.lat,
+        lng: payload.lng,
+        speed: payload.speed,
+        heading: payload.heading,
+        timestamp: payload.timestamp,
+      }
+
+      queryClient.setQueryData<{ vehicles: Vehicle[]; count: number } | undefined>(
+        queryKeyRef.current,
+        (current) => {
+          if (!current) {
+            return current
+          }
+
+          const vehicles = current.vehicles.some(
+            (vehicle) => vehicle.vehicle_id === positionUpdate.vehicle_id,
+          )
+            ? current.vehicles.map((vehicle) =>
+                vehicle.vehicle_id === positionUpdate.vehicle_id
+                  ? {
+                      ...vehicle,
+                      lat: positionUpdate.lat,
+                      lng: positionUpdate.lng,
+                      speed: positionUpdate.speed,
+                      heading: positionUpdate.heading,
+                      timestamp: positionUpdate.timestamp,
+                    }
+                  : vehicle,
+              )
+            : [
+                ...current.vehicles,
+                {
+                  vehicle_id: positionUpdate.vehicle_id,
+                  registration: positionUpdate.vehicle_id,
+                  name: positionUpdate.vehicle_id,
+                  lat: positionUpdate.lat,
+                  lng: positionUpdate.lng,
+                  speed: positionUpdate.speed,
+                  heading: positionUpdate.heading,
+                  ignition_on: true,
+                  timestamp: positionUpdate.timestamp,
+                },
+              ]
+
+          return { ...current, vehicles }
+        },
+      )
+
+      onPositionUpdate?.(positionUpdate)
     }
 
     socket.addEventListener('message', handleMessage)

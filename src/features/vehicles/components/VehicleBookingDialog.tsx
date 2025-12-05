@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { Vehicle } from '../types'
+import type { BookingQuote } from '../utils/pricing'
+import { PRICING_CONFIG, buildDurationLabel, calculateBookingQuote } from '../utils/pricing'
 
 type BookingStep = 'details' | 'review' | 'success'
 
@@ -15,11 +17,6 @@ interface VehicleBookingDialogProps {
   vehicle?: Vehicle
   onOpenChange: (open: boolean) => void
   onTripStart?: (vehicle: Vehicle) => void
-}
-
-interface BookingQuote {
-  estimate: number
-  durationMinutes: number
 }
 
 export function VehicleBookingDialog({ open, vehicle, onOpenChange, onTripStart }: VehicleBookingDialogProps) {
@@ -87,7 +84,7 @@ export function VehicleBookingDialog({ open, vehicle, onOpenChange, onTripStart 
     setStartValue(formatDateTimeLocal(startDate))
     setEndValue(formatDateTimeLocal(endDate))
 
-    const nextQuote = calculateQuote(startDate, endDate)
+    const nextQuote = calculateBookingQuote(startDate, endDate)
     setQuote(nextQuote)
     setStep('review')
     setError(null)
@@ -193,7 +190,7 @@ export function VehicleBookingDialog({ open, vehicle, onOpenChange, onTripStart 
               </div>
               <p className="mt-3 text-2xl font-bold leading-tight">${quote.estimate.toFixed(2)}</p>
               <p className="text-xs text-muted-foreground">
-                {durationLabel} &middot; Assumes base $15 + $18/hr + energy/ops fee $4.50
+                {`${durationLabel} · Assumes base $${PRICING_CONFIG.baseFare} + $${PRICING_CONFIG.hourlyRate}/hr + energy/ops fee $${PRICING_CONFIG.energyFee.toFixed(2)}`}
               </p>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -279,31 +276,6 @@ function buildDefaultRange() {
     start: formatDateTimeLocal(start),
     end: formatDateTimeLocal(end),
   }
-}
-
-function calculateQuote(start: Date, end: Date): BookingQuote {
-  const durationMinutes = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000))
-  const durationHours = durationMinutes / 60
-  const baseFare = 15
-  const hourlyRate = 18
-  const energyFee = 4.5
-  const estimate = Math.max(baseFare, baseFare + hourlyRate * durationHours + energyFee)
-  return {
-    estimate: Math.round(estimate * 100) / 100,
-    durationMinutes,
-  }
-}
-
-function buildDurationLabel(durationMinutes: number) {
-  if (durationMinutes < 60) {
-    return `${durationMinutes} min`
-  }
-  const hours = Math.floor(durationMinutes / 60)
-  const minutes = durationMinutes % 60
-  if (!minutes) {
-    return `${hours} h`
-  }
-  return `${hours} h ${minutes} min`
 }
 
 function formatDateTimeLocal(date: Date) {

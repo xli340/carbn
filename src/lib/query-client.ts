@@ -1,7 +1,17 @@
-import { QueryClient } from '@tanstack/react-query'
+import { QueryCache, QueryClient } from '@tanstack/react-query'
+
+import { UnauthorizedError } from './api-client'
+import { useAuthStore } from '@/features/auth/store/auth-store'
 
 export function createQueryClient() {
   return new QueryClient({
+    queryCache: new QueryCache({
+      onError: (error) => {
+        if (error instanceof UnauthorizedError) {
+          useAuthStore.getState().signOut()
+        }
+      },
+    }),
     defaultOptions: {
       queries: {
         staleTime: 30_000,
