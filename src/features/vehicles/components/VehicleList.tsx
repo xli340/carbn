@@ -170,8 +170,8 @@ export function VehicleList({
               onPageChange={setPage}
             />
             <p className="text-xs text-muted-foreground">
-              Assumption: vehicles in view stand in for recent trips; ignition state indicates whether a trip is in
-              progress; click to open demo track playback.
+              Assumption: vehicles in this card stand in for recent trips; ignition state indicates whether a trip is in
+              progress; click to open to show sellected vehicle's historical path.
             </p>
           </div>
         )}

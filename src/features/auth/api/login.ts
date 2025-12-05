@@ -26,8 +26,20 @@ export async function loginWithCredentials(request: LoginRequest) {
   })
 
   if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || 'Unable to authenticate with the platform')
+    const fallbackMessage = 'Unable to authenticate with the platform'
+    let message: string | undefined
+
+    try {
+      message = await response.text()
+    } catch (error) {
+      console.warn('[auth] Failed to read login error response', error)
+    }
+
+    if (response.status === 400 || response.status === 401) {
+      message = 'Incorrect email or password'
+    }
+
+    throw new Error(message || fallbackMessage)
   }
 
   return (await response.json()) as LoginResponse

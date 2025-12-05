@@ -855,6 +855,8 @@ function VehicleInfo({
       ? `${vehicle.speed.toFixed(1)} km/h`
       : 'Speed unavailable'
   const lastUpdated = vehicle.timestamp ? new Date(vehicle.timestamp).toLocaleString() : 'Unknown'
+  const hasValidCoordinates = Number.isFinite(vehicle.lat) && Number.isFinite(vehicle.lng)
+  const coordinatesLabel = hasValidCoordinates ? `${vehicle.lat.toFixed(5)}, ${vehicle.lng.toFixed(5)}` : 'N/A'
   const ignitionLabel = vehicle.ignition_on ? 'Ignition on' : 'Ignition off'
   const ignitionColor = vehicle.ignition_on ? 'text-red-600' : 'text-emerald-600'
   const canBook = !vehicle.ignition_on && !tripActive
@@ -863,12 +865,18 @@ function VehicleInfo({
     : tripActive
       ? 'Trip in progress for this vehicle.'
       : 'Unavailable while ignition is on. Try again when the vehicle is idle.'
+  const availabilityTone = canBook
+    ? 'text-emerald-500 dark:text-emerald-300'
+    : tripActive
+      ? 'text-amber-500 dark:text-amber-300'
+      : 'text-foreground'
   return (
     <div className="w-full max-w-[90vw] space-y-3 text-sm sm:w-[260px] sm:max-w-[280px]">
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">Selected vehicle</p>
         <p className="text-base font-semibold leading-tight">{vehicle.name}</p>
         <p className="text-xs text-muted-foreground">{vehicle.registration}</p>
+        <p className="text-xs text-muted-foreground break-words">ID: {vehicle.vehicle_id}</p>
       </div>
       <div className="space-y-1 text-xs text-muted-foreground">
         <p>
@@ -876,10 +884,11 @@ function VehicleInfo({
         </p>
         <p className={ignitionColor}>{ignitionLabel}</p>
         <p>Updated {lastUpdated}</p>
+        <p className="break-words">Location: {coordinatesLabel}</p>
       </div>
       <div className="space-y-2 rounded-lg border border-dashed border-border/70 bg-muted/40 p-3 text-xs text-foreground break-words">
         <p className="font-semibold">Booking status</p>
-        <p className="text-muted-foreground">{availability}</p>
+        <p className={availabilityTone}>{availability}</p>
       </div>
       <div className="flex justify-center">
         {tripActive ? (
