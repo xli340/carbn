@@ -12,6 +12,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
 import { Switch } from '@/components/ui/switch'
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from '@/config/map'
 import type { MapBounds, Vehicle, VehicleTrackPoint } from '../types'
@@ -169,6 +170,51 @@ export const VehicleMap = memo(function VehicleMap({
       return { from: point, to: next, durationMs }
     })
   }, [trackPoints])
+
+  const { totalTrackDurationMs, segmentStartOffsets } = useMemo(() => {
+    let offset = 0
+    const offsets = trackSegments.map((segment) => {
+      const start = offset
+      offset += segment.durationMs
+      return start
+    })
+
+    return { totalTrackDurationMs: offset, segmentStartOffsets: offsets }
+  }, [trackSegments])
+
+  const overallProgress = useMemo(() => {
+    if (!animationEnabled || !trackSegments.length || totalTrackDurationMs <= 0) {
+      return 0
+    }
+
+    if (animationState === 'completed' || playbackIndex >= trackPoints.length - 1) {
+      return 100
+    }
+
+    const currentSegmentIndex = clamp(segmentIndexRef.current, 0, trackSegments.length - 1)
+    const currentSegment = trackSegments[currentSegmentIndex]
+    const segmentStart = segmentStartOffsets[currentSegmentIndex] ?? 0
+    const elapsedInSegment = Math.min(pausedProgressRef.current, currentSegment.durationMs)
+    const segmentProgress =
+      currentSegment.durationMs > 0 ? elapsedInSegment / currentSegment.durationMs : 0
+
+    const completedMs = segmentStart + currentSegment.durationMs * segmentProgress
+    const ratio = completedMs / totalTrackDurationMs
+    if (!Number.isFinite(ratio)) {
+      return 0
+    }
+
+    return Math.max(0, Math.min(100, ratio * 100))
+  }, [
+    animationEnabled,
+    animationState,
+    interpolatedPoint,
+    segmentStartOffsets,
+    totalTrackDurationMs,
+    trackSegments,
+    playbackIndex,
+    trackPoints.length,
+  ])
 
   const currentAnimatedPoint = useMemo(() => {
     if (!animationEnabled) return null
@@ -395,7 +441,7 @@ export const VehicleMap = memo(function VehicleMap({
 
   const adjustPlaybackSpeed = useCallback((delta: number) => {
     setPlaybackSpeed((current) => {
-      const next = Math.min(Math.max(0.5, Number((current + delta).toFixed(1))), 4)
+      const next = Math.min(Math.max(0.5, Number((current + delta).toFixed(1))), 16)
       return next
     })
   }, [])
@@ -427,25 +473,34 @@ export const VehicleMap = memo(function VehicleMap({
                 <p className="text-[11px] text-muted-foreground">Choose how to view history</p>
               </div>
               <div className="flex items-center gap-2">
-              <Label htmlFor="track-animation-mode" className="text-[11px] text-muted-foreground">
-                Off
-              </Label>
-              <Switch
-                id="track-animation-mode"
-                checked={isAnimationMode}
-                onCheckedChange={handleToggleAnimationMode}
-              />
-              <Label
-                htmlFor="track-animation-mode"
-                className="text-[11px] font-medium text-foreground"
-              >
-                Animation
-              </Label>
-            </div>
+                <Label htmlFor="track-animation-mode" className="text-[11px] text-muted-foreground">
+                  Off
+                </Label>
+                <Switch
+                  id="track-animation-mode"
+                  checked={isAnimationMode}
+                  onCheckedChange={handleToggleAnimationMode}
+                />
+                <Label
+                  htmlFor="track-animation-mode"
+                  className="text-[11px] font-medium text-foreground"
+                >
+                  Animation
+                </Label>
+              </div>
             </div>
 
             {animationEnabled && (
               <div className="pointer-events-auto flex w-full flex-col gap-2 rounded-lg border bg-background/90 px-3 py-2 shadow-sm md:w-[420px]">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Playback progress</span>
+                    <span className="font-medium text-foreground tabular-nums">
+                      {Math.round(overallProgress)}%
+                    </span>
+                  </div>
+                  <Progress value={overallProgress} className="h-2" />
+                </div>
                 <div className="grid w-full grid-cols-5 gap-2 md:gap-3">
                   <Button
                     size="sm"
@@ -478,7 +533,7 @@ export const VehicleMap = memo(function VehicleMap({
                     className="h-8 min-w-0 px-2 text-xs"
                     variant="secondary"
                     onClick={() => adjustPlaybackSpeed(0.5)}
-                    disabled={playbackSpeed >= 4}
+                    disabled={playbackSpeed >= 16}
                   >
                     Fast
                   </Button>
