@@ -462,12 +462,32 @@ export const VehicleMap = memo(function VehicleMap({
     [activeTripVehicleId],
   )
 
+  const tripInProgress = Boolean(activeTripVehicleId)
+
   return (
     <div className="relative h-full w-full min-w-0">
+      {tripInProgress && onEndTrip && (
+        <>
+          <div className="touch-overlay absolute inset-x-0 bottom-4 z-20 flex justify-center px-3 md:hidden">
+            <div className="w-full max-w-[520px] select-none">
+              <Button className="h-10 w-full" variant="destructive" onClick={onEndTrip}>
+                End trip
+              </Button>
+            </div>
+          </div>
+          <div className="touch-overlay absolute top-4 right-4 z-20 hidden md:flex">
+            <div className="select-none">
+              <Button size="sm" variant="destructive" onClick={onEndTrip}>
+                End trip
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
       {(trackPoints.length > 0 || isTrackActive) && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 flex justify-center px-3 md:top-4 md:bottom-auto md:justify-end md:px-4">
-          <div className="flex w-full max-w-[520px] flex-col items-stretch gap-2 md:max-w-[420px] md:items-end">
-            <div className="pointer-events-auto flex w-full flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/90 px-3 py-2 shadow-sm md:w-[420px]">
+        <div className="absolute inset-x-0 bottom-4 z-10 flex justify-center px-3 md:top-4 md:bottom-auto md:justify-end md:px-4">
+          <div className="touch-overlay flex w-full max-w-[520px] flex-col items-stretch gap-2 select-none md:max-w-[420px] md:items-end">
+            <div className="flex w-full flex-wrap items-center justify-between gap-3 rounded-lg border bg-background/90 px-3 py-2 shadow-sm md:w-[420px]">
               <div className="space-y-0.5">
                 <p className="text-xs font-semibold leading-none text-foreground">Track playback</p>
                 <p className="text-[11px] text-muted-foreground">Choose how to view history</p>
@@ -491,7 +511,7 @@ export const VehicleMap = memo(function VehicleMap({
             </div>
 
             {animationEnabled && (
-              <div className="pointer-events-auto flex w-full flex-col gap-2 rounded-lg border bg-background/90 px-3 py-2 shadow-sm md:w-[420px]">
+              <div className="flex w-full flex-col gap-2 rounded-lg border bg-background/90 px-3 py-2 shadow-sm md:w-[420px]">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                     <span>Playback progress</span>

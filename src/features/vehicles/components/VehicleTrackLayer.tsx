@@ -43,20 +43,15 @@ export function VehicleTrackLayer({ points, color = '#ef4444', fitToPath = false
       map.panTo(path[0])
       if (map.getZoom) {
         const currentZoom = map.getZoom() ?? 0
-        const targetZoom = Math.min(currentZoom || 12, 11)
-        map.setZoom(targetZoom || 11)
+        const targetZoom = Math.max(currentZoom, 14)
+        map.setZoom(Math.min(targetZoom, 17))
       }
       return
     }
 
     const bounds = new google.maps.LatLngBounds()
     path.forEach((point) => bounds.extend(point))
-    map.fitBounds(bounds, 220)
-
-    const currentZoom = map.getZoom ? map.getZoom() : undefined
-    if (currentZoom && currentZoom > 12) {
-      map.setZoom(12)
-    }
+    map.fitBounds(bounds, 100)
   }, [fitToPath, map, path])
 
   return null
