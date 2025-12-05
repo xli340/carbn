@@ -72,6 +72,7 @@ export const VehicleMap = memo(function VehicleMap({
     animationEnabled,
     animationState,
     playbackSpeed,
+    playbackIndex,
     animatedTrail,
     currentAnimatedPoint,
     overallProgress,
@@ -143,11 +144,14 @@ export const VehicleMap = memo(function VehicleMap({
   }, [animationEnabled, mapInstance, trackPoints])
 
   useEffect(() => {
-    if (!animationEnabled || !mapInstance || !currentAnimatedPoint) {
+    if (!animationEnabled || !mapInstance || !trackPoints.length) {
       return
     }
-    mapInstance.panTo({ lat: currentAnimatedPoint.lat, lng: currentAnimatedPoint.lng })
-  }, [animationEnabled, currentAnimatedPoint, mapInstance])
+    const activePoint = trackPoints[Math.min(playbackIndex, trackPoints.length - 1)]
+    if (activePoint) {
+      mapInstance.panTo({ lat: activePoint.lat, lng: activePoint.lng })
+    }
+  }, [animationEnabled, mapInstance, playbackIndex, trackPoints])
 
   const handleToggleAnimationMode = useCallback(
     (checked: boolean) => {

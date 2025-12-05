@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CalendarClock, CheckCircle2, DollarSign, Timer, X } from 'lucide-react'
 
@@ -20,34 +20,41 @@ interface VehicleBookingDialogProps {
 }
 
 export function VehicleBookingDialog({ open, vehicle, onOpenChange, onTripStart }: VehicleBookingDialogProps) {
-  const [startValue, setStartValue] = useState(buildDefaultRange().start)
-  const [endValue, setEndValue] = useState(buildDefaultRange().end)
+  if (!open || typeof document === 'undefined') {
+    return null
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm px-3 py-6 sm:items-center sm:px-4">
+      <BookingDialogContent
+        key={vehicle?.vehicle_id ?? 'none'}
+        vehicle={vehicle}
+        onOpenChange={onOpenChange}
+        onTripStart={onTripStart}
+      />
+    </div>,
+    document.body,
+  )
+}
+
+function BookingDialogContent({
+  vehicle,
+  onOpenChange,
+  onTripStart,
+}: {
+  vehicle?: Vehicle
+  onOpenChange: (open: boolean) => void
+  onTripStart?: (vehicle: Vehicle) => void
+}) {
+  const defaultRange = useMemo(() => buildDefaultRange(), [])
+  const [startValue, setStartValue] = useState(defaultRange.start)
+  const [endValue, setEndValue] = useState(defaultRange.end)
   const [step, setStep] = useState<BookingStep>('details')
   const [quote, setQuote] = useState<BookingQuote | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [referenceId, setReferenceId] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!open) return
-    const range = buildDefaultRange()
-    setStartValue(range.start)
-    setEndValue(range.end)
-    setStep('details')
-    setQuote(null)
-    setReferenceId(null)
-    setError(null)
-  }, [open])
-
-  useEffect(() => {
-    if (!open || !vehicle) return
-    const range = buildDefaultRange()
-    setStartValue(range.start)
-    setEndValue(range.end)
-    setStep('details')
-    setQuote(null)
-    setReferenceId(null)
-    setError(null)
-  }, [vehicle, open])
+  const durationLabel = quote ? buildDurationLabel(quote.durationMinutes) : null
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -55,6 +62,8 @@ export function VehicleBookingDialog({ open, vehicle, onOpenChange, onTripStart 
       setQuote(null)
       setReferenceId(null)
       setError(null)
+      setStartValue(defaultRange.start)
+      setEndValue(defaultRange.end)
     }
     onOpenChange(nextOpen)
   }
@@ -66,7 +75,7 @@ export function VehicleBookingDialog({ open, vehicle, onOpenChange, onTripStart 
       return
     }
 
-    const fallback = buildDefaultRange()
+    const fallback = defaultRange
     let startDate = new Date(startValue)
     let endDate = new Date(endValue)
 
@@ -97,165 +106,156 @@ export function VehicleBookingDialog({ open, vehicle, onOpenChange, onTripStart 
     setStep('success')
   }
 
-  if (!open || typeof document === 'undefined') {
-    return null
-  }
+  return (
+    <div className="relative w-full max-w-[340px] min-w-0 max-h-[90vh] overflow-y-auto rounded-2xl border border-border/70 bg-background/95 p-4 shadow-2xl shadow-black/30 sm:max-w-xl sm:p-6">
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={() => handleOpenChange(false)}
+        className="absolute right-4 top-4 rounded-full p-1 text-muted-foreground transition hover:bg-muted"
+      >
+        <X className="h-5 w-5" />
+      </button>
 
-  const durationLabel = quote ? buildDurationLabel(quote.durationMinutes) : null
-
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm px-3 py-6 sm:items-center sm:px-4">
-      <div className="relative w-full max-w-[340px] min-w-0 max-h-[90vh] overflow-y-auto rounded-2xl border border-border/70 bg-background/95 p-4 shadow-2xl shadow-black/30 sm:max-w-xl sm:p-6">
-        <button
-          type="button"
-          aria-label="Close"
-          onClick={() => handleOpenChange(false)}
-          className="absolute right-4 top-4 rounded-full p-1 text-muted-foreground transition hover:bg-muted"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        <div className="flex items-start justify-between gap-3 pr-12">
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Demo booking</p>
-            <h3 className="text-lg font-semibold">Book vehicle</h3>
-            <p className="text-sm text-muted-foreground">
-              Pick a start/end time, review the sample fare, and confirm a mock booking (no real API calls).
-            </p>
-          </div>
-          {vehicle && (
-            <Badge variant="outline" className="text-xs uppercase">
-              {vehicle.registration}
-            </Badge>
-          )}
+      <div className="flex items-start justify-between gap-3 pr-12">
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Demo booking</p>
+          <h3 className="text-lg font-semibold">Book vehicle</h3>
+          <p className="text-sm text-muted-foreground">
+            Pick a start/end time, review the sample fare, and confirm a mock booking (no real API calls).
+          </p>
         </div>
-
-        {step === 'details' && (
-          <form className="mt-6 space-y-5" onSubmit={handleReviewQuote}>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 min-w-0">
-                <Label htmlFor="booking-start">Start time</Label>
-                <Input
-                  id="booking-start"
-                  type="datetime-local"
-                  value={startValue}
-                  className="w-full"
-                  step={3600}
-                  onChange={(event) => setStartValue(event.target.value)}
-                />
-              </div>
-              <div className="space-y-2 min-w-0">
-                <Label htmlFor="booking-end">End time</Label>
-                <Input
-                  id="booking-end"
-                  type="datetime-local"
-                  value={endValue}
-                  className="w-full"
-                  step={3600}
-                  onChange={(event) => setEndValue(event.target.value)}
-                />
-              </div>
-            </div>
-
-            {error && <p className="text-xs text-destructive">{error}</p>}
-
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <CalendarClock className="h-4 w-4" />
-                <span>Next: preview an example fare breakdown for ops review.</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" className="bg-black text-white hover:bg-black/90" disabled={!vehicle}>
-                  Valuation
-                </Button>
-              </div>
-            </div>
-          </form>
-        )}
-
-        {step === 'review' && quote && (
-          <div className="mt-6 space-y-5">
-            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 sm:p-5">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2 text-sm font-semibold">
-                  <DollarSign className="h-4 w-4 text-primary" />
-                  Estimated fare
-                </div>
-                <Badge variant="secondary" className="self-start text-[0.7rem] uppercase">
-                  Demo only
-                </Badge>
-              </div>
-              <p className="mt-3 text-2xl font-bold leading-tight">${quote.estimate.toFixed(2)}</p>
-              <p className="text-xs text-muted-foreground">
-                {`${durationLabel} · Assumes base $${PRICING_CONFIG.baseFare} + $${PRICING_CONFIG.hourlyRate}/hr + energy/ops fee $${PRICING_CONFIG.energyFee.toFixed(2)}`}
-              </p>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <BookingSummary label="Start" value={formatReadableDate(startValue)} />
-                <BookingSummary label="End" value={formatReadableDate(endValue)} />
-                <BookingSummary
-                  label="Vehicle"
-                  value={vehicle ? `${vehicle.name} · ${vehicle.registration}` : 'No vehicle selected'}
-                />
-                <BookingSummary label="Duration" value={durationLabel ?? '—'} />
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setStep('details')}>
-                Edit times
-              </Button>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-                <Button
-                  className="w-full sm:w-auto bg-black text-white hover:bg-black/90"
-                  onClick={handleConfirm}
-                  disabled={!vehicle || !quote}
-                >
-                  Confirm & book
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {step === 'success' && (
-          <div className="mt-6 space-y-5">
-            <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/40 bg-emerald-50/70 p-4 text-emerald-700">
-              <CheckCircle2 className="mt-0.5 h-5 w-5" />
-              <div className="space-y-1">
-                <p className="text-base font-semibold">Booking complete (demo)</p>
-                <p className="text-xs text-emerald-800">
-                  Ref {referenceId ?? 'pending'} · This flow is illustrative only; no backend calls fired.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-border/70 bg-muted/30 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <Timer className="h-4 w-4 text-primary" />
-                Trip summary
-              </div>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <BookingSummary label="Start" value={formatReadableDate(startValue)} />
-                <BookingSummary label="End" value={formatReadableDate(endValue)} />
-                <BookingSummary label="Vehicle" value={vehicle ? vehicle.name : 'None selected'} />
-                <BookingSummary label="Estimated fare" value={quote ? `$${quote.estimate.toFixed(2)}` : '—'} />
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <Button className="bg-black text-white hover:bg-black/90" onClick={() => handleOpenChange(false)}>
-                Back to map
-              </Button>
-            </div>
-          </div>
+        {vehicle && (
+          <Badge variant="outline" className="text-xs uppercase">
+            {vehicle.registration}
+          </Badge>
         )}
       </div>
-    </div>,
-    document.body,
+
+      {step === 'details' && (
+        <form className="mt-6 space-y-5" onSubmit={handleReviewQuote}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 min-w-0">
+              <Label htmlFor="booking-start">Start time</Label>
+              <Input
+                id="booking-start"
+                type="datetime-local"
+                value={startValue}
+                className="w-full"
+                step={3600}
+                onChange={(event) => setStartValue(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2 min-w-0">
+              <Label htmlFor="booking-end">End time</Label>
+              <Input
+                id="booking-end"
+                type="datetime-local"
+                value={endValue}
+                className="w-full"
+                step={3600}
+                onChange={(event) => setEndValue(event.target.value)}
+              />
+            </div>
+          </div>
+
+          {error && <p className="text-xs text-destructive">{error}</p>}
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <CalendarClock className="h-4 w-4" />
+              <span>Next: preview an example fare breakdown for ops review.</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="bg-black text-white hover:bg-black/90" disabled={!vehicle}>
+                Valuation
+              </Button>
+            </div>
+          </div>
+        </form>
+      )}
+
+      {step === 'review' && quote && (
+        <div className="mt-6 space-y-5">
+          <div className="rounded-2xl border border-border/70 bg-muted/30 p-4 sm:p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <DollarSign className="h-4 w-4 text-primary" />
+                Estimated fare
+              </div>
+              <Badge variant="secondary" className="self-start text-[0.7rem] uppercase">
+                Demo only
+              </Badge>
+            </div>
+            <p className="mt-3 text-2xl font-bold leading-tight">${quote.estimate.toFixed(2)}</p>
+            <p className="text-xs text-muted-foreground">
+              {`${durationLabel} · Assumes base $${PRICING_CONFIG.baseFare} + $${PRICING_CONFIG.hourlyRate}/hr + energy/ops fee $${PRICING_CONFIG.energyFee.toFixed(2)}`}
+            </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <BookingSummary label="Start" value={formatReadableDate(startValue)} />
+              <BookingSummary label="End" value={formatReadableDate(endValue)} />
+              <BookingSummary
+                label="Vehicle"
+                value={vehicle ? `${vehicle.name} · ${vehicle.registration}` : 'No vehicle selected'}
+              />
+              <BookingSummary label="Duration" value={durationLabel ?? '—'} />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={() => setStep('details')}>
+              Edit times
+            </Button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Button
+                className="w-full sm:w-auto bg-black text-white hover:bg-black/90"
+                onClick={handleConfirm}
+                disabled={!vehicle || !quote}
+              >
+                Confirm & book
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {step === 'success' && (
+        <div className="mt-6 space-y-5">
+          <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/40 bg-emerald-50/70 p-4 text-emerald-700">
+            <CheckCircle2 className="mt-0.5 h-5 w-5" />
+            <div className="space-y-1">
+              <p className="text-base font-semibold">Booking complete (demo)</p>
+              <p className="text-xs text-emerald-800">
+                Ref {referenceId ?? 'pending'} · This flow is illustrative only; no backend calls fired.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border/70 bg-muted/30 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Timer className="h-4 w-4 text-primary" />
+              Trip summary
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <BookingSummary label="Start" value={formatReadableDate(startValue)} />
+              <BookingSummary label="End" value={formatReadableDate(endValue)} />
+              <BookingSummary label="Vehicle" value={vehicle ? vehicle.name : 'None selected'} />
+              <BookingSummary label="Estimated fare" value={quote ? `$${quote.estimate.toFixed(2)}` : '—'} />
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button className="bg-black text-white hover:bg-black/90" onClick={() => handleOpenChange(false)}>
+              Back to map
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

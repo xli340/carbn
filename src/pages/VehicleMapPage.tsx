@@ -1,5 +1,5 @@
 import { APIProvider } from '@vis.gl/react-google-maps'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { env } from '@/config/env'
@@ -32,7 +32,7 @@ export function VehicleMapPage() {
   const [activeTripVehicleId, setActiveTripVehicleId] = useState<string | null>(null)
   const [liveTripTrackPoints, setLiveTripTrackPoints] = useState<VehicleTrackPoint[]>([])
 
-  const vehicles = vehiclesQuery.data?.vehicles ?? []
+  const vehicles = useMemo(() => vehiclesQuery.data?.vehicles ?? [], [vehiclesQuery.data])
   const trackPoints = trackVehicleId && trackParams ? vehicleTrackQuery.data?.points ?? [] : []
   const isLiveTripActive = Boolean(activeTripVehicleId)
   const displayedTrackPoints = isLiveTripActive ? liveTripTrackPoints : trackPoints
@@ -144,7 +144,7 @@ export function VehicleMapPage() {
     setShowInfoWindow(false)
     setSelectedVehicleId(undefined)
     vehiclesQuery.refetch()
-  }, [clearHistoryTrackState, vehiclesQuery])
+  }, [clearHistoryTrackState, setSelectedVehicleId, vehiclesQuery])
 
   const handleBookingOpenChange = useCallback((open: boolean) => {
     if (!open) {

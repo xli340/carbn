@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -34,19 +34,48 @@ export function VehicleList({
   isHistoryTrackActive = false,
   onExitTracking,
 }: VehicleListProps) {
+  const resetKey = `${vehicles.length}-${isLoading}-${tripActive}`
+  return (
+    <VehicleListInner
+      key={resetKey}
+      vehicles={vehicles}
+      trackedVehicle={trackedVehicle}
+      selectedVehicleId={selectedVehicleId}
+      isLoading={isLoading}
+      onSelectVehicle={onSelectVehicle}
+      onOpenHistory={onOpenHistory}
+      className={className}
+      tripActive={tripActive}
+      onEndTrip={onEndTrip}
+      isHistoryTrackActive={isHistoryTrackActive}
+      onExitTracking={onExitTracking}
+    />
+  )
+}
+
+function VehicleListInner({
+  vehicles,
+  trackedVehicle,
+  selectedVehicleId,
+  isLoading,
+  onSelectVehicle,
+  onOpenHistory,
+  className,
+  tripActive = false,
+  onEndTrip,
+  isHistoryTrackActive = false,
+  onExitTracking,
+}: VehicleListProps) {
   const PAGE_SIZE = 10
   const [page, setPage] = useState(1)
 
-  useEffect(() => {
-    setPage(1)
-  }, [vehicles.length, isLoading, tripActive])
-
   const displayTrackingVehicle = isHistoryTrackActive ? trackedVehicle : undefined
   const totalPages = Math.max(1, Math.ceil(vehicles.length / PAGE_SIZE))
+  const clampedPage = Math.min(Math.max(1, page), totalPages)
   const pagedVehicles = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE
+    const start = (clampedPage - 1) * PAGE_SIZE
     return vehicles.slice(start, start + PAGE_SIZE)
-  }, [page, vehicles])
+  }, [clampedPage, vehicles])
 
   return (
     <Card className={cn('flex h-full min-w-0 flex-col border-primary/20 shadow-lg shadow-primary/5', className)}>
@@ -163,7 +192,7 @@ export function VehicleList({
               })}
             </div>
             <PaginationNav
-              page={page}
+              page={clampedPage}
               totalPages={totalPages}
               totalItems={vehicles.length}
               pageSize={PAGE_SIZE}

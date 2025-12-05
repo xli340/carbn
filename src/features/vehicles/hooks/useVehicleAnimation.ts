@@ -86,41 +86,6 @@ export function useVehicleAnimation({ trackPoints, onExit }: UseVehicleAnimation
     [trackSegments],
   )
 
-  const updateProgress = useCallback(() => {
-    if (!animationEnabled || !trackSegments.length || totalTrackDurationMs <= 0) {
-      setOverallProgress(0)
-      return
-    }
-
-    if (animationState === 'completed' || playbackIndex >= trackPoints.length - 1) {
-      setOverallProgress(100)
-      return
-    }
-
-    const currentSegmentIndex = clamp(segmentIndexRef.current, 0, trackSegments.length - 1)
-    const currentSegment = trackSegments[currentSegmentIndex]
-    const segmentStart = segmentStartOffsets[currentSegmentIndex] ?? 0
-    const elapsedInSegment = Math.min(pausedProgressRef.current, currentSegment.durationMs)
-    const segmentProgress =
-      currentSegment.durationMs > 0 ? elapsedInSegment / currentSegment.durationMs : 0
-
-    const completedMs = segmentStart + currentSegment.durationMs * segmentProgress
-    const ratio = completedMs / totalTrackDurationMs
-    setOverallProgress(Number.isFinite(ratio) ? Math.max(0, Math.min(100, ratio * 100)) : 0)
-  }, [
-    animationEnabled,
-    animationState,
-    segmentStartOffsets,
-    totalTrackDurationMs,
-    trackSegments,
-    playbackIndex,
-    trackPoints.length,
-  ])
-
-  useEffect(() => {
-    updateProgress()
-  }, [updateProgress])
-
   const currentAnimatedPoint = useMemo(() => {
     if (!animationEnabled) return null
     if (interpolatedPoint) return interpolatedPoint
@@ -196,7 +161,12 @@ export function useVehicleAnimation({ trackPoints, onExit }: UseVehicleAnimation
 
       setInterpolatedPoint(nextPoint)
       pausedProgressRef.current = elapsed
-      updateProgress()
+      const segmentStart = segmentStartOffsets[segmentIndexRef.current] ?? 0
+      const completedMs = segmentStart + currentSegment.durationMs * Math.min(t, 1)
+      const ratio = completedMs / totalTrackDurationMs
+      if (Number.isFinite(ratio)) {
+        setOverallProgress(Math.max(0, Math.min(100, ratio * 100)))
+      }
 
       if (t >= 1) {
         const overshoot = Math.max(0, elapsed - effectiveDuration)
@@ -207,6 +177,7 @@ export function useVehicleAnimation({ trackPoints, onExit }: UseVehicleAnimation
         if (segmentIndexRef.current >= trackSegments.length) {
           setInterpolatedPoint(trackPoints[trackPoints.length - 1] ?? null)
           setAnimationState('completed')
+          setOverallProgress(100)
           return
         }
 
@@ -222,16 +193,14 @@ export function useVehicleAnimation({ trackPoints, onExit }: UseVehicleAnimation
     return () => {
       cancelAnimationLoop()
     }
-  }, [animationEnabled, animationState, cancelAnimationLoop, trackSegments, trackPoints, updateProgress])
+  }, [animationEnabled, animationState, cancelAnimationLoop, segmentStartOffsets, totalTrackDurationMs, trackSegments, trackPoints])
 
   useEffect(() => {
     if (!animationEnabled) {
       cancelAnimationLoop()
-      setInterpolatedPoint(null)
       segmentIndexRef.current = 0
       pausedProgressRef.current = 0
       segmentStartTimeRef.current = 0
-      setOverallProgress(0)
     }
   }, [animationEnabled, cancelAnimationLoop])
 

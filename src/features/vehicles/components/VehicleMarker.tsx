@@ -7,7 +7,7 @@ interface VehicleMarkerProps {
   vehicle: Vehicle
   position: google.maps.LatLngLiteral
   supportsAdvancedMarkers: boolean
-  coreLibrary: typeof google.maps | null
+  coreLibrary: google.maps.CoreLibrary | null
   isSelected?: boolean
   color: string
   onSelect?: (vehicleId: string) => void
