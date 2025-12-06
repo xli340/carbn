@@ -7,7 +7,7 @@ import {
   useMap,
   useMapsLibrary,
 } from '@vis.gl/react-google-maps'
-import { LoaderCircle } from 'lucide-react'
+import { History, LoaderCircle } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,7 @@ interface VehicleMapProps {
   onSelectVehicle?: (vehicleId?: string) => void
   onBoundsChange?: (bounds: MapBounds) => void
   onBookVehicle?: (vehicle: Vehicle) => void
+  onOpenHistory?: (vehicle: Vehicle) => void
   onDismissInfoWindow?: () => void
   showInfoWindow?: boolean
   isTrackActive?: boolean
@@ -53,6 +54,7 @@ export const VehicleMap = memo(function VehicleMap({
   onSelectVehicle,
   onBoundsChange,
   onBookVehicle,
+  onOpenHistory,
   onDismissInfoWindow,
   onEndTrip,
   activeTripVehicleId,
@@ -429,6 +431,7 @@ export const VehicleMap = memo(function VehicleMap({
             <VehicleInfo
               vehicle={selectedVehicle}
               onBookVehicle={onBookVehicle}
+              onOpenHistory={onOpenHistory}
               onEndTrip={onEndTrip}
               tripActive={activeTripVehicleId === selectedVehicle.vehicle_id}
             />
@@ -451,11 +454,13 @@ export const VehicleMap = memo(function VehicleMap({
 function VehicleInfo({
   vehicle,
   onBookVehicle,
+  onOpenHistory,
   onEndTrip,
   tripActive,
 }: {
   vehicle: Vehicle
   onBookVehicle?: (vehicle: Vehicle) => void
+  onOpenHistory?: (vehicle: Vehicle) => void
   onEndTrip?: () => void
   tripActive?: boolean
 }) {
@@ -499,20 +504,26 @@ function VehicleInfo({
         <p className="font-semibold">Booking status</p>
         <p className={availabilityTone}>{availability}</p>
       </div>
-      <div className="flex justify-center">
+      <div className="flex flex-col gap-2">
         {tripActive ? (
           <Button size="sm" variant="destructive" className="w-full" onClick={onEndTrip}>
             End trip
           </Button>
         ) : (
-          <Button
-            size="sm"
-            className="w-full bg-black text-white hover:bg-black/90"
-            disabled={!canBook}
-            onClick={() => onBookVehicle?.(vehicle)}
-          >
-            Start booking
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" className="flex-1" onClick={() => onOpenHistory?.(vehicle)}>
+              <History className="mr-2 h-3.5 w-3.5" />
+              History
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1 bg-black text-white hover:bg-black/90"
+              disabled={!canBook}
+              onClick={() => onBookVehicle?.(vehicle)}
+            >
+              Book
+            </Button>
+          </div>
         )}
       </div>
     </div>

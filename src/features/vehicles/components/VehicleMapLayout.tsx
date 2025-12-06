@@ -78,6 +78,7 @@ export function VehicleMapLayout({
               onEndTrip={onEndTrip}
               onBoundsChange={onBoundsChange}
               onSelectVehicle={onSelectVehicle}
+              onOpenHistory={onOpenHistory}
             />
           </CardContent>
         </Card>
