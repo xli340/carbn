@@ -160,7 +160,7 @@ To ensure a logical and closed-loop application flow, I made the following assum
 
 -----
 
-## 🏗️ Project Structure
+## <a id="project-structure"></a>🏗️ Project Structure
 
 The project follows a Feature-based directory structure for better maintenance and scalability:
 
@@ -185,7 +185,7 @@ src/
 
 -----
 
-## 🛠️ Tech Stack
+## <a id="tech-stack"></a>🛠️ Tech Stack
 
   * **Core**: React 19, TypeScript, Vite
   * **State Management**: Zustand (Global State), TanStack Query (Server State/Caching)
@@ -225,7 +225,7 @@ If this were a production project, I would consider the following enhancements:
 
 -----
 
-## ❤️ Acknowledgments
+## <a id="acknowledgments"></a>❤️ Acknowledgments
 
 Thank you very much for your time and this opportunity\!
 
