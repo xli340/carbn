@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useQueryClient, type QueryKey } from '@tanstack/react-query'
 
@@ -12,6 +12,8 @@ interface UseLiveVehicleUpdatesArgs {
   enabled?: boolean
   onPositionUpdate?: (payload: VehiclePositionUpdate) => void
 }
+
+type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'reconnecting'
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -61,141 +63,179 @@ export function useLiveVehicleUpdates({
   const queryClient = useQueryClient()
   const token = useAuthStore((state) => state.token)
 
-  const sortedVehicleIds = useMemo(
-    () => [...new Set(vehicleIds)].sort(),
-    [vehicleIds],
-  )
-  const socketRef = useRef<WebSocket | null>(null)
+  const sortedVehicleIds = useMemo(() => [...new Set(vehicleIds)].sort(), [vehicleIds])
+
+  const sortedVehicleIdsRef = useRef(sortedVehicleIds)
+  const onPositionUpdateRef = useRef(onPositionUpdate)
   const queryKeyRef = useRef<QueryKey>(queryKey)
 
+  useEffect(() => {
+    sortedVehicleIdsRef.current = sortedVehicleIds
+  }, [sortedVehicleIds])
+  useEffect(() => {
+    onPositionUpdateRef.current = onPositionUpdate
+  }, [onPositionUpdate])
   useEffect(() => {
     queryKeyRef.current = queryKey
   }, [queryKey])
 
-  useEffect(() => {
-    if (!enabled || !token) {
-      return
+  const socketRef = useRef<WebSocket | null>(null)
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryCountRef = useRef(0)
+  const isUnmountingRef = useRef(false)
+  const isConnectingRef = useRef(false)
+  const connectRef = useRef<() => void>(() => {})
+
+  const [status, setStatus] = useState<ConnectionStatus>('disconnected')
+
+  const handleMessageReceived = useCallback(
+    (payload: VehiclePositionUpdate) => {
+      queryClient.setQueryData<{ vehicles: Vehicle[]; count: number } | undefined>(
+        queryKeyRef.current,
+        (current) => {
+          if (!current) return current
+
+          const vehicles = current.vehicles.some((v) => v.vehicle_id === payload.vehicle_id)
+            ? current.vehicles.map((v) =>
+                v.vehicle_id === payload.vehicle_id
+                  ? {
+                      ...v,
+                      lat: payload.lat,
+                      lng: payload.lng,
+                      speed: payload.speed,
+                      heading: payload.heading,
+                      timestamp: payload.timestamp,
+                      ignition_on: true,
+                    }
+                  : v,
+              )
+            : [
+                ...current.vehicles,
+                {
+                  vehicle_id: payload.vehicle_id,
+                  registration: payload.vehicle_id,
+                  name: payload.vehicle_id,
+                  lat: payload.lat,
+                  lng: payload.lng,
+                  speed: payload.speed,
+                  heading: payload.heading,
+                  ignition_on: true,
+                  timestamp: payload.timestamp,
+                },
+              ]
+          return { ...current, vehicles }
+        },
+      )
+
+      if (onPositionUpdateRef.current) {
+        onPositionUpdateRef.current(payload)
+      }
+    },
+    [queryClient],
+  )
+
+  const connect = useCallback(() => {
+    if (!token || isUnmountingRef.current || !enabled) return
+
+    if (isConnectingRef.current || socketRef.current?.readyState === WebSocket.OPEN) return
+
+    isConnectingRef.current = true
+    setStatus((prev) => (prev === 'connected' ? prev : 'connecting'))
+
+    if (socketRef.current) {
+      socketRef.current.close()
     }
 
     const socket = createAuthorizedWebSocket({ token })
     socketRef.current = socket
 
-    const handleMessage = (event: MessageEvent) => {
+    socket.onopen = () => {
+      setStatus('connected')
+      retryCountRef.current = 0
+      isConnectingRef.current = false
+
+      const ids = sortedVehicleIdsRef.current
+      if (ids.length) {
+        socket.send(JSON.stringify({ action: 'subscribe', vehicle_ids: ids }))
+      }
+    }
+
+    socket.onmessage = (event: MessageEvent) => {
       const payload = parsePositionUpdateMessage(event.data)
-      if (!payload) {
+      if (payload) {
+        handleMessageReceived(payload)
+      }
+    }
+
+    socket.onerror = (error) => {
+      console.error('[ws] Socket error:', error)
+    }
+
+    socket.onclose = (event) => {
+      isConnectingRef.current = false
+      socketRef.current = null
+
+      if (isUnmountingRef.current) return
+
+      setStatus('disconnected')
+
+      if (event.code === 4001 || event.code === 4003) {
         return
       }
-      const positionUpdate: VehiclePositionUpdate = {
-        vehicle_id: payload.vehicle_id,
-        lat: payload.lat,
-        lng: payload.lng,
-        speed: payload.speed,
-        heading: payload.heading,
-        timestamp: payload.timestamp,
+
+      setStatus('reconnecting')
+      const timeout = Math.min(1000 * Math.pow(2, retryCountRef.current), 30_000)
+
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
       }
 
-      queryClient.setQueryData<{ vehicles: Vehicle[]; count: number } | undefined>(
-        queryKeyRef.current,
-        (current) => {
-          if (!current) {
-            return current
-          }
-
-          const vehicles = current.vehicles.some(
-            (vehicle) => vehicle.vehicle_id === positionUpdate.vehicle_id,
-          )
-            ? current.vehicles.map((vehicle) =>
-                vehicle.vehicle_id === positionUpdate.vehicle_id
-                  ? {
-                      ...vehicle,
-                      lat: positionUpdate.lat,
-                      lng: positionUpdate.lng,
-                      speed: positionUpdate.speed,
-                      heading: positionUpdate.heading,
-                      timestamp: positionUpdate.timestamp,
-                    }
-                  : vehicle,
-              )
-            : [
-                ...current.vehicles,
-                {
-                  vehicle_id: positionUpdate.vehicle_id,
-                  registration: positionUpdate.vehicle_id,
-                  name: positionUpdate.vehicle_id,
-                  lat: positionUpdate.lat,
-                  lng: positionUpdate.lng,
-                  speed: positionUpdate.speed,
-                  heading: positionUpdate.heading,
-                  ignition_on: true,
-                  timestamp: positionUpdate.timestamp,
-                },
-              ]
-
-          return { ...current, vehicles }
-        },
-      )
-
-      onPositionUpdate?.(positionUpdate)
+      reconnectTimeoutRef.current = setTimeout(() => {
+        retryCountRef.current += 1
+        connectRef.current()
+      }, timeout)
     }
-
-    socket.addEventListener('message', handleMessage)
-
-    return () => {
-      socket.removeEventListener('message', handleMessage)
-
-      const closeSocket = () => {
-        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CLOSING) {
-          socket.close()
-        }
-      }
-
-      if (socket.readyState === WebSocket.CONNECTING) {
-        socket.addEventListener('open', closeSocket, { once: true })
-      } else {
-        closeSocket()
-      }
-
-      socketRef.current = null
-    }
-  }, [enabled, token, queryClient, onPositionUpdate])
+  }, [enabled, handleMessageReceived, token])
 
   useEffect(() => {
-    if (!enabled || !sortedVehicleIds.length) {
-      return
-    }
+    connectRef.current = connect
+  }, [connect])
 
-    const socket = socketRef.current
-    if (!socket) {
-      return
-    }
+  useEffect(() => {
+    isUnmountingRef.current = false
+    let initialTimeout: ReturnType<typeof setTimeout> | null = null
 
-    const vehicleIdsToSubscribe = sortedVehicleIds
-    const subscribe = () => {
-      if (vehicleIdsToSubscribe.length) {
-        socket.send(
-          JSON.stringify({
-            action: 'subscribe',
-            vehicle_ids: vehicleIdsToSubscribe,
-          }),
-        )
-      }
-    }
-
-    if (socket.readyState === WebSocket.OPEN) {
-      subscribe()
-    } else {
-      socket.addEventListener('open', subscribe, { once: true })
+    if (enabled && token) {
+      initialTimeout = setTimeout(() => connect(), 0)
     }
 
     return () => {
-      if (socket.readyState === WebSocket.OPEN && vehicleIdsToSubscribe.length) {
-        socket.send(
-          JSON.stringify({
-            action: 'unsubscribe',
-            vehicle_ids: vehicleIdsToSubscribe,
-          }),
-        )
+      isUnmountingRef.current = true
+      if (initialTimeout) {
+        clearTimeout(initialTimeout)
       }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+      if (socketRef.current) {
+        socketRef.current.close()
+        socketRef.current = null
+      }
+      isConnectingRef.current = false
     }
-  }, [enabled, sortedVehicleIds])
+  }, [connect, enabled, token])
+
+  useEffect(() => {
+    const socket = socketRef.current
+    if (socket && socket.readyState === WebSocket.OPEN && sortedVehicleIds.length) {
+      socket.send(
+        JSON.stringify({
+          action: 'subscribe',
+          vehicle_ids: sortedVehicleIds,
+        }),
+      )
+    }
+  }, [sortedVehicleIds])
+
+  return { status }
 }
