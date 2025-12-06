@@ -13,11 +13,11 @@ This is a React-based vehicle rental and tracking demonstration application. It 
 - [Core Features](#-core-features)
 - [Assumptions & Design Decisions](#-assumptions--design-decisions)
 - [Local Setup Guide](#-local-setup-guide)
-- [Project Structure](#-project-structure)
-- [Tech Stack](#-tech-stack)
+- [Project Structure](#project-structure)
+- [Tech Stack](#tech-stack)
 - [Key Code Highlights](#-key-code-highlights)
 - [Future Improvements](#-future-improvements)
-- [Acknowledgments](#-acknowledgments)
+- [Acknowledgments](#acknowledgments)
 
 -----
 
