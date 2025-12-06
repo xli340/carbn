@@ -64,10 +64,12 @@ export function useLiveVehicleUpdates({
   const token = useAuthStore((state) => state.token)
 
   const sortedVehicleIds = useMemo(() => [...new Set(vehicleIds)].sort(), [vehicleIds])
+  const subscriptionKey = useMemo(() => JSON.stringify(sortedVehicleIds), [sortedVehicleIds])
 
   const sortedVehicleIdsRef = useRef(sortedVehicleIds)
   const onPositionUpdateRef = useRef(onPositionUpdate)
   const queryKeyRef = useRef<QueryKey>(queryKey)
+  const lastSubscriptionKeyRef = useRef<string>('')
 
   useEffect(() => {
     sortedVehicleIdsRef.current = sortedVehicleIds
@@ -227,15 +229,33 @@ export function useLiveVehicleUpdates({
 
   useEffect(() => {
     const socket = socketRef.current
-    if (socket && socket.readyState === WebSocket.OPEN && sortedVehicleIds.length) {
-      socket.send(
-        JSON.stringify({
-          action: 'subscribe',
-          vehicle_ids: sortedVehicleIds,
-        }),
-      )
+    if (!socket || socket.readyState !== WebSocket.OPEN || !sortedVehicleIds.length) {
+      return
     }
-  }, [sortedVehicleIds])
+
+    if (lastSubscriptionKeyRef.current === subscriptionKey) {
+      return
+    }
+
+    socket.send(
+      JSON.stringify({
+        action: 'subscribe',
+        vehicle_ids: sortedVehicleIds,
+      }),
+    )
+    lastSubscriptionKeyRef.current = subscriptionKey
+
+    return () => {
+      if (socket.readyState === WebSocket.OPEN && sortedVehicleIds.length) {
+        socket.send(
+          JSON.stringify({
+            action: 'unsubscribe',
+            vehicle_ids: sortedVehicleIds,
+          }),
+        )
+      }
+    }
+  }, [sortedVehicleIds, subscriptionKey])
 
   return { status }
 }
