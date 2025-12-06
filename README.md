@@ -13,11 +13,11 @@ This is a React-based vehicle rental and tracking demonstration application. It 
 - [Core Features](#-core-features)
 - [Assumptions & Design Decisions](#-assumptions--design-decisions)
 - [Local Setup Guide](#-local-setup-guide)
-- [Project Structure](#-project-structure)
-- [Tech Stack](#-tech-stack)
+- [Project Structure](#project-structure)
+- [Tech Stack](#tech-stack)
 - [Key Code Highlights](#-key-code-highlights)
 - [Future Improvements](#-future-improvements)
-- [Acknowledgments](#-acknowledgments)
+- [Acknowledgments](#acknowledgments)
 
 -----
 
@@ -88,6 +88,27 @@ Based on the challenge requirements in the email, this project implements the fo
   * **Responsive Design**: Perfectly adapted for both desktop and mobile screens.
   * **Theme Switching**: Supports Light/Dark mode toggling.
   * **Interaction Details**: Includes list pagination, loading states, error prompts, etc.
+
+### 📸 Screenshots
+
+#### 1. Authentication
+![Login Page](./screenshots/login.png)
+
+#### 2. Map Overview & Vehicle Selection
+*Real-time fleet overview and vehicle details.*
+![Map Overview](./screenshots/home.png)
+![Vehicle Details](./screenshots/detail.png)
+
+#### 3. Booking Simulation
+*Mock booking flow with price estimation.*
+![Booking Dialog](./screenshots/booking.png)
+![Booking Success](./screenshots/bookingSuccessfully.png)
+
+#### 4. History Tracking & Playback
+*Date selection, static track view, and animation controls.*
+![History Settings](./screenshots/historySetting.png)
+![Static Tracking](./screenshots/tracking.png)
+![Animation Playback](./screenshots/animation.png)
 
 -----
 
@@ -186,9 +207,10 @@ src/
       * The core Hook. It converts discrete track points into a continuous animation.
       * Implements time-based linear interpolation to calculate latitude, longitude, and heading between two points, using `requestAnimationFrame` to ensure animation smoothness.
 
-3.  **High-Performance Markers (`VehicleMarker.tsx`)**
+3.  **Vehicle Clustering for Performance (`useVehicleClusters.ts`)**
 
-      * Implements automatic fallback based on API Key configuration. If a Map ID is valid, it prioritizes Google Maps `AdvancedMarker` (better performance, supports HTML/CSS styling); otherwise, it falls back to the traditional `Marker`.
+      * To optimize map rendering when displaying a large fleet, I implemented a client-side clustering algorithm.
+      * It dynamically groups nearby vehicles into single cluster markers based on the current map zoom level. This significantly reduces the number of overlapping markers and DOM elements, ensuring smooth interaction even with high data volume.
 
 -----
 
@@ -200,7 +222,6 @@ If this were a production project, I would consider the following enhancements:
   * **Precise Vehicle States**: Distinguish between "Idle", "Booked", "Maintenance", and other states.
   * **Geofencing**: Draw return zones on the map.
   * **Unit & E2E Testing**: Add Jest and Cypress test cases to ensure core flow stability.
-  * **Performance Optimization**: For massive fleets (10,000+ vehicles), consider using WebGL layers or Deck.gl for rendering.
 
 -----
 
