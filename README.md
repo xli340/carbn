@@ -77,6 +77,7 @@ Based on the challenge requirements in the email, this project implements the fo
   * Click "Book" in the vehicle info card to select a rental time range.
   * The system calculates an estimated quote based on duration and configured rates (Base Fare + Hourly Rate + Energy Fee).
   * Upon confirmation, the vehicle status updates to "Active Trip" on the frontend, the map isolates the vehicle's track, and the trip simulation begins.
+  * Trip movement might not start immediately after beginning a trip because movement is randomized (API limitation); this is a simple demo to illustrate the rental workflow.
 
 ### 📜 Advanced Playback (History)
 
