@@ -130,7 +130,7 @@ To ensure a logical and closed-loop application flow, I made the following assum
 1.  **Clone the project**
 
     ```bash
-    git clone <repo-url>
+    git clone https://github.com/xli340/carbn.git
     cd carbn
     ```
 
