@@ -82,6 +82,7 @@ Based on the challenge requirements in the email, this project implements the fo
 
   * **Interpolation Animation**: To solve jumpiness between historical track points, the frontend implements interpolation algorithms. This ensures smooth movement during playback and automatically calculates the vehicle's heading based on the angle between two points.
   * **Playback Controls**: Provides full player controls (Play/Pause/Speed/Exit).
+  * **Heads-up**: In animation mode, if the vehicle stayed still for a long time within the selected window, the playback will initially appear paused—this is expected. Please wait, or switch to a **7d** window and increase playback speed since the early portion may be stationary.
 
 ### 🎨 UI/UX
 
@@ -234,4 +235,3 @@ Thank you very much for your time and this opportunity\!
   * **Kerry Ellis**
 
 I look forward to hearing your feedback\!
-
